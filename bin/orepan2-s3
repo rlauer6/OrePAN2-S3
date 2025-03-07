@@ -271,7 +271,7 @@ INVALIDATION_PATHS+=("/$PATH_PREFIX/orepan2-cache.json")
 INVALIDATION_PATHS+=("/index.html")
 
 if test -n "$FILE"; then
-    INVALIDATION_PATHS+=("/$PATH_PREFIX/authors/D/DU/DUMMY/$(basename $FILE)")
+    INVALIDATION_PATHS+=("/$PATH_PREFIX/authors/id/D/DU/DUMMY/$(basename $FILE)")
 fi
 
 case "$COMMAND" in 
