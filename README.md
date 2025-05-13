@@ -54,6 +54,9 @@ looks something like this:
 }
 ```
 
+Note this is the minimum configuration. See `perldoc OrePAN::S3` for
+more configuration file options.
+
 If you are not using a CloudFront distribution (see below), remove or set the
 DistributionId to "".
 
@@ -78,7 +81,7 @@ prevent the script from invalidating the cache.
 
 Keep in mind that AWS gives you 1000 invalidations/month for free
 after which you pay $.005 per invalidation request. More than one
-files can be included in each request. The script will invalidate 4
+file can be included in each request. The script will invalidate 4
 files on each invalidation request:
 
 * `index.html`
@@ -88,15 +91,16 @@ files on each invalidation request:
 
 # Using a Website Enabled S3 Bucket
 
-As explained [here](https://blog.tbcdevelopmentgroup.com/2025-02-18-post.html),
+As explained
+[here](https://blog.tbcdevelopmentgroup.com/2025-02-18-post.html),
 there are many ways to create static websites. One such way is to use
-a feature of S3 that allows you serve directly from the bucket. In
-order to use HTTPS however, you would need to front the bucket using
-CloudFront and optionally install your own certificate.  However, if
-you don't need that kind of security and simply want to plow ahead
-with an insecure public bucket, you can do so. In that case you might
-want to create a bucket policy to restrict the IPs addresses that can
-access your bucket. Caveat Emptor.
+a feature of S3 that allows you to serve content directly from the
+bucket. In order to use HTTPS however, you would need to front the
+bucket using CloudFront and optionally install your own certificate.
+However, if you don't need that kind of security and simply want to
+plow ahead with an insecure public bucket, you can do so. In that case
+you might want to create a bucket policy to restrict the IPs addresses
+that can access your bucket. Caveat Emptor.
 
 To use an insecure bucket, simply remove the DistributionId from the
 configuration file.

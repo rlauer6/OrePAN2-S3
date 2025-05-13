@@ -7,6 +7,7 @@ use Amazon::Credentials;
 use Amazon::S3;
 use Archive::Tar;
 use Bedrock::Template;
+use Bedrock qw(slurp_file);
 use Carp;
 use CLI::Simple;
 use Data::Dumper;
@@ -26,31 +27,16 @@ Readonly::Scalar our $FALSE          => 0;
 
 use parent qw(CLI::Simple);
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 caller or __PACKAGE__->main();
 
 ########################################################################
-sub slurp_file {
-########################################################################
-  my ($file) = @_;
-
-  local $RS = undef;
-
-  open my $fh, '<', $file
-    or die "could not open $file\n";
-
-  my $content = <$fh>;
-
-  close $fh;
-
-  return $content;
-}
-
-########################################################################
 sub fetch_config {
 ########################################################################
-  my ($self) = @_;
+  my ( $self, $profile ) = @_;
+
+  $profile //= 'default';
 
   my $file = $self->get_config_file;
 
@@ -60,10 +46,14 @@ sub fetch_config {
   die "$file not found\n"
     if !-e $file;
 
-  my $config = eval { return JSON->new->decode( slurp_file($file) ); };
+  my $config = eval { return JSON->new->decode( scalar slurp_file($file) ); };
 
-  die "could not read config file\n$EVAL_ERROR"
+  die "could not read config file ($file)\n$EVAL_ERROR"
     if !$config || $EVAL_ERROR;
+
+  if ( $config->{$profile} ) {
+    $config = $config->{$profile};
+  }
 
   $self->set_config($config);
 
@@ -310,11 +300,18 @@ sub fetch_template {
 ########################################################################
   my ($self) = @_;
 
-  local $RS = undef;
+  my $template = $self->get_template;
+  my $index    = $self->get_config->{index} // {};
+
+  # see if the index is set in the config file...
+  if ( !$template && $index->{template} ) {
+    $template = $index->{template};
+  }
 
   my $fh = *DATA;
 
-  my $index_template = <$fh>;
+  my $index_template = slurp_file( $template // $fh );
+
   $index_template =~ s/\n\n=pod.*$/\n/xsm;
 
   $self->set_template($index_template);
@@ -352,9 +349,11 @@ sub main {
         help|h
         config-file|c=s
         output|o=s
+        profile|p=s
+        template|t=s
       )
     ],
-    default_options => { config_file => $DEFAULT_CONFIG, },
+    default_options => { config_file => $DEFAULT_CONFIG, profile => 'default' },
     extra_options   => [qw(config s3 credentials template)],
     commands        => {
       create   => \&create_index,
@@ -374,7 +373,7 @@ __DATA__
 <html>
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-15">
-    <title>TBC CPAN Repository</title>
+    <title>CPAN Repository</title>
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"
     integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo="
     crossorigin="anonymous"></script>
@@ -404,7 +403,7 @@ __DATA__
   </head>
   
   <body>
-    <h1>TBC CPAN Repository</h1>
+    <h1>CPAN Repository</h1>
     
 <foreach --define-var="distribution" $repo.keys()->
       <h2><var $distribution></h2>
@@ -446,8 +445,119 @@ Script for maintaining a DarkPAN mirror using S3 + CloudFront
 =head2 Options
 
  -h, --help         Display this help message
- -c, --config-file  Name of the configuration file (default: cf-cpan-mirror.json)
+ -c, --config-file  Name of the configuration file (default: ~/.orepan2-s3.json)
  -o, --output       Name of the output file
+ -p, --profile      Name of a profile inside the config file
+ -t, --template     Name of a template that will be used as the index.html page
+
+=head2 Configuration File
+
+The configuration file for `orepan2-s3` is a JSON file that can
+contain multiple profiles (or none). The format should look something
+like this:
+
+  {
+      "tbc" : {
+          "AWS": {
+              "profile" : "prod",
+              "region" : "us-east-1",
+              "bucket" : "tbc-cpan-mirror",
+              "prefix" : "orepan2"
+          },
+          "CloudFront" : {
+              "DistributionId" : "E2ABCDEFGHIJK"
+          }
+      },
+      "default" : {
+          "index" : {
+              "template" : "/path/to/template",
+              "files": {
+                 "src" : "dest"
+              }
+          },
+          "AWS": {
+              "profile" : "prod",
+              "region" : "us-east-1",
+              "bucket" : "cpan.openbedrock.net",
+              "prefix" : "orepan2"
+          },
+          "CloudFront" : {
+              "DistributionId" : "E2JKLMNOPQRXYZ",
+              "InvalidationPaths" : []
+          }
+      }
+  }
+
+Each profile can contain up to 3 secions (AWS, CloudFront, index). If you only
+have one profile you don't need place it in a 'default' section.
+
+=over 5
+
+=item index
+
+This section allows you to create custom template for the DarkPAN home page.
+
+=over 10
+
+=item template
+
+The name of a template file that will be parsed and uploaded as F</index.html>.
+
+=item files
+
+A hash of source/destination pairs that specify additional files to upload.
+
+Example:
+
+ "files" { 
+    "/home/rlauer/git/some-project/foo.css" : "/css/foo.css",
+    "/home/rlauer/git/some-project/foo.js" : "/javascript/foo.js"
+ }
+
+=back
+
+=item AWS
+
+=over 10
+
+=item profile
+
+The IAM profile where the bucket is provisioned.
+
+=item region
+
+AWS region. Default: us-east-1
+
+=item bucket
+
+S3 bucket name
+
+=item prefix
+
+The prefix where the CPAN distribution files will be stored. Default: orepan2.
+
+=back
+
+=item CloudFront
+
+=over 10
+
+=item DistributionId
+
+CloudFront distribution id
+
+=item InvalidationPaths
+
+An array of additional paths to invalidate when adding new distributions.
+
+I<Note: There is no additional charge for adding additional
+paths. Each invalidation batch is considered as one billing unit by
+AWS. However, keep in mind you get 1000 invalidation paths for free
+each month. Thereafter each path costs $0.005 per path.>
+
+=back
+
+=back
 
 =head1 AUTHOR
 
