@@ -178,11 +178,12 @@ create_index() {
 
     if test -e "$index_template"; then
         test -n "$VERBOSE" && echo "creating index from template $index_template..."
-        orepan2-s3-index $template $config_profile -c $CONFIG_FILE create >$index
-        
-        test -n "$VERBOSE" && echo "uploading new index..."
-        orepan2-s3-index $config_profile -c $CONFIG_FILE upload $index
     fi
+
+    orepan2-s3-index $template $config_profile -c $CONFIG_FILE create >$index
+
+    test -n "$VERBOSE" && echo "uploading new index..."
+    orepan2-s3-index $config_profile -c $CONFIG_FILE upload $index
 
     test -n "$VERBOSE" && echo "looking for artifacts to upload..."
     upload_artifacts "$config"

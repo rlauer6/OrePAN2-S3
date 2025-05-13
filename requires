@@ -1,7 +1,7 @@
 Amazon::Credentials     1.1.23
 Amazon::S3              0.65
 Archive::Tar            3.02
-Bedrock::Template       0
+Template                0
 CLI::Simple             0.0.9
 JSON                    4.10
 OrePAN2::Index          0
