@@ -27,7 +27,7 @@ Readonly::Scalar our $FALSE          => 0;
 
 use parent qw(CLI::Simple);
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 caller or __PACKAGE__->main();
 
@@ -455,6 +455,18 @@ __DATA__
 
 =pod
 
+=head1 NAME
+
+ orepan2-s3
+
+=head1 DESCRIPTION
+
+This script is used to add distributions to your own DarkPAN
+repository housed on Amazon's S3 storage. It leverages L<OrePAN2> to
+create and maintain your own DarkPAN repository. You can read more
+about setting up a DarkPAN on Amazon using S3 + Cloudfront
+L<here|https://github.com/rlauer6/OrePAN2-S3/blob/master/README.md>.
+
 =head1 USAGE
 
  orepan2-s3 Options Command
@@ -487,7 +499,7 @@ Script for maintaining a DarkPAN mirror using S3 + CloudFront
 
 =head2 Configuration File
 
-The configuration file for `orepan2-s3` is a JSON file that can
+The configuration file for C<orepan2-s3> is a JSON file that can
 contain multiple profiles (or none). The format should look something
 like this:
 
@@ -523,7 +535,7 @@ like this:
       }
   }
 
-Each profile can contain up to 3 secions (AWS, CloudFront, index). If you only
+Each profile can contain up to 3 sections (AWS, CloudFront, index). If you only
 have one profile you don't need place it in a 'default' section.
 
 =over 5
@@ -627,5 +639,10 @@ each month. Thereafter each path costs $0.005 per path.>
 =head1 AUTHOR
 
 Rob Lauer - <rlauer6@comcast.net>
+
+=head1 LICENSE
+
+This program is free software; you can redistribute it and/or modify
+it under the same terms as Perl itself.
 
 =cut

@@ -172,7 +172,7 @@ create_index() {
         index_template=$(echo $config | jq -r '.template')
         
         if [[ -n "$index_template" && -e "$index_template" ]]; then
-            $template="--template $index_template"
+            template="--template $index_template"
         fi
     fi
 
@@ -285,6 +285,7 @@ NO_INVALIDATE=""
 NOT_OK="ERROR"
 OK=""
 INDEX_TEMPLATE=""
+VERBOSE=""
 
 # Parse command-line options using getopt
 OPTIONS=$(getopt -o hp:t:P:c:d:b:xn:T:v \

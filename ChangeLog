@@ -1,3 +1,12 @@
+Thu May 15 14:49:06 2025  Rob Lauer  <rlauer6@comcast.net>
+
+	[0.04]:
+	* bin/orepan2-s3
+	- fix template option assignment
+	- initialize VERBOSE
+	* lib/OrePAN2/S3.pm
+	- pod updates
+
 Tue May 13 07:19:45 2025  Rob Lauer  <rlauer6@comcast.net>
 
 	[0.03]:
