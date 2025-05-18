@@ -1,3 +1,20 @@
+Sun May 18 08:14:01 2025  Rob Lauer  <rlauer6@comcast.net>
+
+	[0.05]:
+	* bin/orepan2-s3
+	- +create-docs
+	- upload and create index in one step
+	- invalidate /docs/*
+	* bin/orepan2-s3-index
+	* lib/OrePAN2/S3.pm
+	- new options: --mirror, --distribution, --upload
+	(_upload_html): new
+	(upload_index): use above
+	(create_docs): new
+	* bin/orepan2-s3-index: add EXTRA to @INC
+	(create_index)
+	- add README.html and module-name.html
+
 Thu May 15 14:49:06 2025  Rob Lauer  <rlauer6@comcast.net>
 
 	[0.04]:

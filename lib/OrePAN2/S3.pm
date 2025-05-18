@@ -10,6 +10,8 @@ use Template;
 use Carp;
 use CLI::Simple;
 use Data::Dumper;
+use DarkPAN::Utils qw(parse_distribution_path);
+use DarkPAN::Utils::Docs;
 use English qw(-no_match_vars);
 use File::Basename qw(basename);
 use File::Temp qw(tempfile);
@@ -27,7 +29,7 @@ Readonly::Scalar our $FALSE          => 0;
 
 use parent qw(CLI::Simple);
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 caller or __PACKAGE__->main();
 
@@ -166,20 +168,39 @@ sub create_invalidation_batch {
 }
 
 ########################################################################
-sub upload_index {
+sub _upload_html {
 ########################################################################
-  my ($self) = @_;
+  my ( $self, $file, $key ) = @_;
 
-  my ($index) = $self->get_args();
-  $index //= 'index.html';
+  croak sprintf '%s not found', $file
+    if !-e $file;
 
-  croak sprintf '%s not found', $index
-    if !-e $index;
+  my $attr = { 'content-type' => 'text/html' };
 
   my $bucket = $self->get_bucket();
-  $bucket->add_key_filename( 'index.html', $index, { 'content-type' => 'text/html' } );
+
+  if ( ref $file ) {
+    $bucket->add_key( $key, ${$file}, $attr );
+  }
+  else {
+    $bucket->add_key_filename( $key, $file, $attr );
+  }
 
   return;
+}
+
+########################################################################
+sub upload_index {
+########################################################################
+  my ( $self, $index ) = @_;
+
+  if ( !$index ) {
+    ($index) = $self->get_args();
+  }
+
+  $index //= 'index.html';
+
+  return $self->_upload_html( $index, 'index.html' );
 }
 
 ########################################################################
@@ -196,6 +217,123 @@ sub show_orepan_index {
   my $listing = $index->as_string;
 
   return $self->send_output($listing);
+}
+
+########################################################################
+sub create_docs {
+########################################################################
+  my ($self) = @_;
+
+  my $distribution = basename( $self->get_distribution );
+
+  if ( $distribution !~ /^D\/DU/xsm ) {
+    $distribution = sprintf 'D/DU/DUMMY/%s', $distribution;
+  }
+
+  my ( $key_prefix, $version ) = parse_distribution_path($distribution);
+
+  my $module_name = $key_prefix;
+  $module_name =~ s/\-/::/gxsm;
+
+  my $dpu = DarkPAN::Utils->new( base_url => $self->get_mirror );
+
+  $dpu->fetch_package($distribution);
+
+  my $file = $dpu->extract_module( $distribution, $module_name );
+
+  if ( $self->get_upload ) {
+    if ($file) {
+      $self->upload_html(
+        name    => "$key_prefix.html",
+        content => $file,
+        prefix  => $key_prefix,
+        pod     => $TRUE,
+        wrap    => $TRUE,
+      );
+    }
+  }
+  else {
+    open my $fh, '>', "$key_prefix.html"
+      or die "could not open $key_prefix.html for writing\n";
+
+    print {$fh} $file;
+
+    close $fh;
+  }
+
+  my $readme = $dpu->extract_file( sprintf '%s-%s/README.md', $key_prefix, $version );
+
+  if ( $self->get_upload && $readme ) {
+    $self->upload_html(
+      name    => 'README.html',
+      content => $readme,
+      prefix  => $key_prefix,
+      wrap    => $TRUE,
+    );
+  }
+  else {
+    open my $fh, '>', 'README.html'
+      or die "could not open README.html for writing\n";
+
+    print {$fh} $readme;
+
+    close $fh;
+  }
+
+  return 0;
+}
+
+########################################################################
+sub upload_html {
+########################################################################
+  my ( $self, %args ) = @_;
+
+  my ( $content, $pod, $prefix, $name ) = @args{qw(content pod prefix name)};
+
+  my $docs = DarkPAN::Utils::Docs->new( text => $content );
+
+  if ($pod) {
+    $docs->parse_pod;
+  }
+  else {
+    $docs->to_html;
+  }
+
+  my $html = $docs->get_html;
+
+  if ( $args{wrap} ) {
+    $html = << "END_OF_HTML";
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+ <head>
+   <title>README</title>
+   <link rel="stylesheet" href="/css/pod.css">
+ </head>
+ <body>
+  $html
+ </body>
+</html>
+END_OF_HTML
+  }
+
+  my $key = sprintf 'docs/%s/%s', $prefix, $name;
+
+  $self->_upload_html( $html, $key );
+
+  return;
+}
+
+########################################################################
+sub look_for_object {
+########################################################################
+  my ( $self, $prefix, $name ) = @_;
+
+  my $key = sprintf 'docs/%s/%s', $prefix, $name;
+
+  return sprintf '/docs/%s/%s', $prefix, $name
+    if $self->get_bucket->head_key($key);
+
+  return;
 }
 
 ########################################################################
@@ -220,10 +358,47 @@ sub create_index {
 
   my $utils = bless {}, 'utils';
 
+  my %app_plugins;
+  my %plugins;
+  my %readme_links;
+  my %pod_links;
+
+  foreach my $distribution ( keys %{$repo} ) {
+
+    my ($distribution_name) = parse_distribution_path($distribution);
+
+    my $readme = $self->look_for_object( $distribution_name, 'README.html' );
+
+    my $pod = $self->look_for_object( $distribution_name, "${distribution_name}.html" );
+
+    my $old_name = $distribution;
+    $distribution =~ s/^.*\/([^\/]+)/$1/xsm;
+    $repo->{$distribution} = delete $repo->{$old_name};
+
+    if ($readme) {
+      $readme_links{$distribution} = $readme;
+    }
+
+    if ($pod) {
+      $pod_links{$distribution} = $pod;
+    }
+
+    if ( $distribution =~ /^BLM\-Startup/xsm ) {
+      $app_plugins{$distribution} = delete $repo->{$distribution};
+    }
+    elsif ( $distribution =~ /^BLM/xsm ) {
+      $plugins{$distribution} = $repo->{$distribution};
+    }
+  }
+
   my $params = {
-    utils     => $utils,
-    repo      => $repo,
-    localtime => scalar localtime
+    utils        => $utils,
+    repo         => $repo,
+    plugins      => \%plugins,
+    app_plugins  => \%app_plugins,
+    readme_links => \%readme_links,
+    pod_links    => \%pod_links,
+    localtime    => scalar localtime,
   };
 
   my $text = $self->get_template;
@@ -235,7 +410,14 @@ sub create_index {
   $template->process( \$text, $params, \$output )
     or die $template->error();
 
-  return $self->send_output($output);
+  if ( $self->get_upload ) {
+    $self->_upload_html( \$output, 'index.html' );
+  }
+  else {
+    $self->send_output($output);
+  }
+
+  return 0;
 }
 
 ########################################################################
@@ -380,11 +562,15 @@ sub main {
         output|o=s
         profile|p=s
         template|t=s
+        mirror|m=s
+        distribution|d=s
+        upload|u
       )
     ],
     default_options => { config_file => $DEFAULT_CONFIG, profile => 'default' },
     extra_options   => [qw(config s3 credentials template)],
     commands        => {
+      'create-docs'   => \&create_docs,
       create          => \&create_index,
       show            => \&show_orepan_index,
       download        => \&download_orepan_index,
@@ -487,15 +673,20 @@ Script for maintaining a DarkPAN mirror using S3 + CloudFront
 
 =item * dump-template - Outputs the default index.html template.
 
+=item * create-docs - parse distribution looking for a README.md and/or pod
+
 =back
 
 =head2 Options
 
- -h, --help         Display this help message
- -c, --config-file  Name of the configuration file (default: ~/.orepan2-s3.json)
- -o, --output       Name of the output file
- -p, --profile      Name of a profile inside the config file
- -t, --template     Name of a template that will be used as the index.html page
+ -h, --help           Display this help message
+ -c, --config-file    Name of the configuration file (default: ~/.orepan2-s3.json)
+ -o, --output         Name of the output file
+ -p, --profile        Name of a profile inside the config file
+ -t, --template       Name of a template that will be used as the index.html page
+ -m, --mirror         CPAN mirror base url, example: https://cpan.openbedrock.net/orepan2
+ -d, --distribution   Path to distribution tarball
+ -u, --upload         Upload files after processing (for create-index, create-docs)
 
 =head2 Configuration File
 

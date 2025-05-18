@@ -177,13 +177,14 @@ create_index() {
     fi
 
     if test -e "$index_template"; then
-        test -n "$VERBOSE" && echo "creating index from template $index_template..."
+        test -n "$VERBOSE" && echo "creating and uploading index.html from template $index_template..."
     fi
 
-    orepan2-s3-index $template $config_profile -c $CONFIG_FILE create >$index
-
-    test -n "$VERBOSE" && echo "uploading new index..."
-    orepan2-s3-index $config_profile -c $CONFIG_FILE upload $index
+    orepan2-s3-index $template $config_profile -c $CONFIG_FILE -u create
+    
+    
+    test -n "$VERBOSE" && echo "extracting and uploading documentation..."
+    orepan2-s3-index $config_profile -c $CONFIG_FILE -u create-docs
 
     test -n "$VERBOSE" && echo "looking for artifacts to upload..."
     upload_artifacts "$config"
@@ -393,6 +394,7 @@ INVALIDATION_PATHS=()
 INVALIDATION_PATHS+=("/$PATH_PREFIX/modules/02packages.details.txt.gz")
 INVALIDATION_PATHS+=("/$PATH_PREFIX/orepan2-cache.json")
 INVALIDATION_PATHS+=("/index.html")
+INVALIDATION_PATHS+=("/docs/*")
 
 for p in $(cat $CONFIG_FILE | jq -r '.default.CloudFront.InvalidationPaths?//[]|.[]|.'); do 
     test -n "$VERBOSE" && echo "adding custom invalidation path: $p" >&2
