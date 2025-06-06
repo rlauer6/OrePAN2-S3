@@ -1,3 +1,25 @@
+Fri Jun  6 12:04:15 2025  Rob Lauer  <rlauer6@comcast.net>
+
+	[0.06]:
+	* Makefile
+	- cleanup, refactored
+	* bin/orepan2-s3
+	- --log-level option
+	- delete, index commands added
+	* lib/OrePAN2/S3.pm
+	- added logging
+	- pod tweaks
+	(_upload_html)
+	- accept ref or string
+	(create_docs)
+	- get distribution from option or argument
+	- get mirror url from config or options
+	(upload_html):
+	- get url prefix from config
+	- pass ref to html to _upload_html
+	(create_index): add logging
+	(main): --mirror => --url
+
 Sun May 18 08:14:01 2025  Rob Lauer  <rlauer6@comcast.net>
 
 	[0.05]:

@@ -10,6 +10,7 @@ Usage: $0 options command args
 Options
 -------
   -h, --help             Display this help message
+  -l, --log-level        logging level, error, warn, info, debug, trace
   -P, --prefix           Path prefix in the S3 bucket
   -b, --bucket           S3 Bucket Name
   -p, --profile          AWS Profile
@@ -25,6 +26,8 @@ Options
 Commands
 --------
 add {file}               Add a tarball to the repository
+delete {file}            Delete a distribution
+index                    Update index.html
 invalidate               Invalidate CloudFront cache
 help                     Display this help message
 
@@ -89,8 +92,8 @@ upload_artifacts() {
         echo "$config" | jq -r '.files| to_entries[] | "\(.key) \(.value)"' |
             while read -r src dest; do
                 if test -e "$src"; then
-                    echo "uploading $src to => s3://$bucket$dest" >&2
-                    aws s3 $aws_profile cp "$src" "s3://$bucket$dest" >&2
+                    test -n "$VERBOSE" && echo "uploading $src to => s3://$bucket$dest" >&2
+                    aws s3 $aws_profile --quiet cp "$src" "s3://$bucket$dest" >&2
                 else
                     echo "$src not found...skipping" >&2
                 fi
@@ -180,11 +183,15 @@ create_index() {
         test -n "$VERBOSE" && echo "creating and uploading index.html from template $index_template..."
     fi
 
-    orepan2-s3-index $template $config_profile -c $CONFIG_FILE -u create
+    LOG_LEVEL=${LOG_LEVEL:-info}
+
+    orepan2-s3-index $template $config_profile -c $CONFIG_FILE -u --log-level $LOG_LEVEL create
     
-    
-    test -n "$VERBOSE" && echo "extracting and uploading documentation..."
-    orepan2-s3-index $config_profile -c $CONFIG_FILE -u create-docs
+    if test -n "$FILE"; then
+        test -n "$VERBOSE" && echo "extracting and uploading documentation..."
+
+        orepan2-s3-index $config_profile -c $CONFIG_FILE -u create-docs $FILE
+    fi
 
     test -n "$VERBOSE" && echo "looking for artifacts to upload..."
     upload_artifacts "$config"
@@ -211,6 +218,28 @@ cleanup() {
 }
 
 ########################################################################
+sync_local() {
+########################################################################
+    # Create a temporary directory
+    TEMP_DIR=$(mktemp -d)
+
+    test -n "$VERBOSE" && echo "syncing s3://$BUCKET/$PATH_PREFIX => $TEMP_DIR/$PATH_PREFIX..."
+
+    # Sync S3 contents to the temporary directory
+    $AWS s3 sync "s3://$BUCKET/$PATH_PREFIX" "$TEMP_DIR/$PATH_PREFIX" --quiet --profile "$AWS_PROFILE"
+}
+
+########################################################################
+index_and_sync_remote() {
+########################################################################
+    test -n "$VERBOSE" && echo "indexing OrePAN repository..." >&2
+    orepan2-indexer "$TEMP_DIR/$PATH_PREFIX"
+
+    test -n "$VERBOSE" && echo "syncing $TEMP_DIR/$PATH_PREFIX => s3://$BUCKET/$PATH_PREFIX..."
+    $AWS s3 sync "$TEMP_DIR/$PATH_PREFIX" "s3://$BUCKET/$PATH_PREFIX" --quiet --profile "$AWS_PROFILE"
+}
+
+########################################################################
 add() {
 ########################################################################
     if test -z "$BUCKET"; then
@@ -223,16 +252,7 @@ add() {
         exit 1;
     fi
 
-    # Create a temporary directory
-    TEMP_DIR=$(mktemp -d)
-
-    # Set an exit trap to always run cleanup
-    trap cleanup EXIT
-
-    test -n "$VERBOSE" && echo "syncing s3://$BUCKET/$PATH_PREFIX => $TEMP_DIR/$PATH_PREFIX..."
-
-    # Sync S3 contents to the temporary directory
-    $AWS s3 sync "s3://$BUCKET/$PATH_PREFIX" "$TEMP_DIR/$PATH_PREFIX" --profile "$AWS_PROFILE"
+    sync_local;
 
     test -n "$VERBOSE" && echo "adding $FILE to OrePAN package index..."
 
@@ -244,11 +264,7 @@ add() {
         exit 1
     fi
 
-    test -n "$VERBOSE" && echo "indexing OrePAN repository..." >&2
-    orepan2-indexer "$TEMP_DIR/$PATH_PREFIX"
-
-    test -n "$VERBOSE" && echo "syncing $TEMP_DIR/$PATH_PREFIX => s3://$BUCKET/$PATH_PREFIX..."
-    $AWS s3 sync "$TEMP_DIR/$PATH_PREFIX" "s3://$BUCKET/$PATH_PREFIX" --profile "$AWS_PROFILE"
+    index_and_sync_remote;
 }
 
 ########################################################################
@@ -287,10 +303,12 @@ NOT_OK="ERROR"
 OK=""
 INDEX_TEMPLATE=""
 VERBOSE=""
+TEMP_DIR=""
+LOG_LEVEL=""
 
 # Parse command-line options using getopt
-OPTIONS=$(getopt -o hp:t:P:c:d:b:xn:T:v \
-                 --long verbose,help,profile:,name:,tag:,template:,prefix:,config:,distribution-id:,bucket:,no-invalidate -- "$@")
+OPTIONS=$(getopt -o hl:p:t:P:c:d:b:xn:T:v \
+                 --long log-level:,verbose,help,profile:,name:,tag:,template:,prefix:,config:,distribution-id:,bucket:,no-invalidate -- "$@")
 
 if [ $? -ne 0 ]; then
     echo "$NOT_OK Error parsing options." >&2
@@ -308,7 +326,13 @@ while true; do
 
         -v|--verbose)
             VERBOSE="1";
-            shift 1
+            LOG_LEVEL=debug;
+            shift 1;
+            ;;
+
+        -l|--log-level)
+            LOG_LEVEL="$2";
+            shift 2;
             ;;
 
         -c|--config)
@@ -362,6 +386,10 @@ while true; do
             ;;
     esac
 done
+
+# Set an exit trap to always run cleanup
+trap cleanup EXIT
+
 
 COMMAND=${1:-}
 
@@ -417,6 +445,35 @@ case "$COMMAND" in
             test -n "$VERBOSE" && echo "invalidating cache...\n${INVALIDATION_PATHS[@]}"
             invalidate_cache
         fi
+        ;;
+
+    delete)
+        if test -z "$FILE"; then
+            echo "$NOT_OK no file specified"
+            usage
+        fi
+        
+        $AWS s3 rm s3://$BUCKET/$PATH_PREFIX/authors/id/D/DU/DUMMY/$FILE --profile $AWS_PROFILE
+        sync_local;
+
+        index_and_sync_remote;
+
+        FILE="";
+
+        create_index;
+
+        if test -z "$NO_INVALIDATE"; then
+            if test -n "$DISTRIBUTION_ID"; then
+                test -n "$VERBOSE" && echo "invalidating cache...\n${INVALIDATION_PATHS[@]}"
+                invalidate_cache
+            fi
+        fi
+
+        ;;
+
+    index)
+        create_index;
+        invalidate_cache;
         ;;
 
     add)

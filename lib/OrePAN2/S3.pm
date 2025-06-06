@@ -8,7 +8,7 @@ use Amazon::S3;
 use Archive::Tar;
 use Template;
 use Carp;
-use CLI::Simple;
+use Carp::Always;
 use Data::Dumper;
 use DarkPAN::Utils qw(parse_distribution_path);
 use DarkPAN::Utils::Docs;
@@ -29,7 +29,9 @@ Readonly::Scalar our $FALSE          => 0;
 
 use parent qw(CLI::Simple);
 
-our $VERSION = '0.05';
+our $VERSION = '0.06';
+
+__PACKAGE__->use_log4perl( level => 'info' );
 
 caller or __PACKAGE__->main();
 
@@ -173,7 +175,7 @@ sub _upload_html {
   my ( $self, $file, $key ) = @_;
 
   croak sprintf '%s not found', $file
-    if !-e $file;
+    if !ref $file && !-e $file;
 
   my $attr = { 'content-type' => 'text/html' };
 
@@ -224,7 +226,13 @@ sub create_docs {
 ########################################################################
   my ($self) = @_;
 
-  my $distribution = basename( $self->get_distribution );
+  my ($distribution) = $self->get_args();
+  $distribution //= $self->get_distribution();
+
+  die "use -d or pass distribution name as an argument\n"
+    if !$distribution;
+
+  $distribution = basename($distribution);
 
   if ( $distribution !~ /^D\/DU/xsm ) {
     $distribution = sprintf 'D/DU/DUMMY/%s', $distribution;
@@ -235,7 +243,12 @@ sub create_docs {
   my $module_name = $key_prefix;
   $module_name =~ s/\-/::/gxsm;
 
-  my $dpu = DarkPAN::Utils->new( base_url => $self->get_mirror );
+  my $orepan_url = $self->get_url // $self->get_config->{url};
+
+  die "use --url or set url in config\n"
+    if !$orepan_url;
+
+  my $dpu = DarkPAN::Utils->new( base_url => $orepan_url );
 
   $dpu->fetch_package($distribution);
 
@@ -271,7 +284,7 @@ sub create_docs {
       wrap    => $TRUE,
     );
   }
-  else {
+  elsif ($readme) {
     open my $fh, '>', 'README.html'
       or die "could not open README.html for writing\n";
 
@@ -290,7 +303,9 @@ sub upload_html {
 
   my ( $content, $pod, $prefix, $name ) = @args{qw(content pod prefix name)};
 
-  my $docs = DarkPAN::Utils::Docs->new( text => $content );
+  my $perldoc_url_prefix = $self->get_config->{perldoc_url_prefix};
+
+  my $docs = DarkPAN::Utils::Docs->new( text => $content, url_prefix => $perldoc_url_prefix );
 
   if ($pod) {
     $docs->parse_pod;
@@ -318,7 +333,7 @@ END_OF_HTML
 
   my $key = sprintf 'docs/%s/%s', $prefix, $name;
 
-  $self->_upload_html( $html, $key );
+  $self->_upload_html( \$html, $key );
 
   return;
 }
@@ -344,6 +359,8 @@ sub create_index {
   my $file = $self->fetch_orepan_index;
 
   my $repo = $self->parse_index($file);
+
+  $self->get_logger->debug( Dumper( [ repo => $repo ] ) );
 
   no strict 'refs';  ## no critic
 
@@ -401,6 +418,8 @@ sub create_index {
     localtime    => scalar localtime,
   };
 
+  $self->get_logger->trace( Dumper( [ params => $params ] ) );
+
   my $text = $self->get_template;
 
   my $template = Template->new();
@@ -412,6 +431,7 @@ sub create_index {
 
   if ( $self->get_upload ) {
     $self->_upload_html( \$output, 'index.html' );
+    $self->get_logger->debug($output);
   }
   else {
     $self->send_output($output);
@@ -562,7 +582,7 @@ sub main {
         output|o=s
         profile|p=s
         template|t=s
-        mirror|m=s
+        url|U=s
         distribution|d=s
         upload|u
       )
@@ -643,7 +663,7 @@ __DATA__
 
 =head1 NAME
 
- orepan2-s3
+orepan2-s3
 
 =head1 DESCRIPTION
 
@@ -684,9 +704,9 @@ Script for maintaining a DarkPAN mirror using S3 + CloudFront
  -o, --output         Name of the output file
  -p, --profile        Name of a profile inside the config file
  -t, --template       Name of a template that will be used as the index.html page
- -m, --mirror         CPAN mirror base url, example: https://cpan.openbedrock.net/orepan2
  -d, --distribution   Path to distribution tarball
  -u, --upload         Upload files after processing (for create-index, create-docs)
+ -U, --url            Cloudfront URL
 
 =head2 Configuration File
 
@@ -721,7 +741,8 @@ like this:
           },
           "CloudFront" : {
               "DistributionId" : "E2JKLMNOPQRXYZ",
-              "InvalidationPaths" : []
+              "InvalidationPaths" : [],
+              "url" : "https://cpan.openbedrock.net/orepan2"
           }
       }
   }
@@ -830,6 +851,10 @@ each month. Thereafter each path costs $0.005 per path.>
 =head1 AUTHOR
 
 Rob Lauer - <rlauer6@comcast.net>
+
+=head1 SEE ALSO
+
+L<OrePAN2>, L<Amazon::S3>
 
 =head1 LICENSE
 
