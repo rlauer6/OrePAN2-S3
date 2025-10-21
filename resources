@@ -1,12 +1,12 @@
 {
-   "repository" : {
-      "web" : "http://github.com/rlauer6/orepan2-s3",
-      "url" : "git://github.com/rlauer6/orepan2-s3.git",
-      "type" : "git"
-   },
    "homepage" : "http://github.com/rlauer6/orepan2-s3.git",
    "bugtracker" : {
       "web" : "http://github.com/rlauer6/orepan2-s3/issues",
       "mailto" : "rlauer6@comcast.net"
+   },
+   "repository" : {
+      "web" : "http://github.com/rlauer6/orepan2-s3",
+      "type" : "git",
+      "url" : "git://github.com/rlauer6/orepan2-s3.git"
    }
 }

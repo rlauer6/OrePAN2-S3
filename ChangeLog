@@ -1,3 +1,17 @@
+Tue Oct 21 09:16:04 2025  Rob Lauer  <rclauer@gmail.com>
+
+	[1.0.0]:
+	* VERSION: new
+	* version.mk: new
+	* .gitignore: *.pm, *.tmp
+	* Makefile
+	- version.mk
+	- build from .pm.in
+	* bin/orepan2-s3
+	- jq 1.7 needs space before ?
+	* lib/OrePAN2/S3.pm.in: version from @PACKAGE_VERSION@
+	* requires: +DarkPAN::Utils
+
 Fri Jun  6 12:04:15 2025  Rob Lauer  <rlauer6@comcast.net>
 
 	[0.06]:

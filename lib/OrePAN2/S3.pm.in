@@ -29,7 +29,7 @@ Readonly::Scalar our $FALSE          => 0;
 
 use parent qw(CLI::Simple);
 
-our $VERSION = '0.06';
+our $VERSION = '@PACKAGE_VERSION@';
 
 __PACKAGE__->use_log4perl( level => 'info' );
 
@@ -44,7 +44,7 @@ sub slurp_file {
 
   my $content;
 
-  if ( openhandle $file) {
+  if ( openhandle $file ) {
     $content = <$file>;
   }
   else {
@@ -317,7 +317,7 @@ sub upload_html {
   my $html = $docs->get_html;
 
   if ( $args{wrap} ) {
-    $html = << "END_OF_HTML";
+    $html = <<"END_OF_HTML";
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
 <html>
  <head>

@@ -51,9 +51,9 @@ find_config_name() {
     local config_file="$1"
     local config_profile="${2:-default}"
 
-    local path_prefix=".$config_profile.index"
+    local path_prefix=".${config_profile}.index"
 
-    local index=$(cat $config_file | jq -r "$path_prefix?//\"\"")
+    local index=$(cat $config_file | jq -r "$path_prefix? //\"\"")
     
     if test -n "$index"; then
         echo $config_profile
@@ -66,10 +66,10 @@ find_config() {
     local config_file="$1"
     local config_profile="${2:-default}"
 
-    config_profile=$(find_config_name "$config_file" "$config_profile");
+    local config_profile=$(find_config_name "$config_file" "$config_profile");
     test -n "$config_profile" && config_profile=".$config_profile"
 
-    local path="$config_profile.index? // \"\""
+    local path="$config_profile.index? //\"\""
 
     cat $config_file | jq -r  "$path"
 }
@@ -82,7 +82,7 @@ upload_artifacts() {
     
     local config="$1"
 
-    if [[ -n "$config" && -n $(echo "$config" | jq -r '.files?//""') ]]; then
+    if [[ -n "$config" && -n $(echo "$config" | jq -r '.files? //""') ]]; then
         local aws_profile="$AWS_PROFILE";
 
         if test -n "$aws_profile"; then
@@ -424,7 +424,7 @@ INVALIDATION_PATHS+=("/$PATH_PREFIX/orepan2-cache.json")
 INVALIDATION_PATHS+=("/index.html")
 INVALIDATION_PATHS+=("/docs/*")
 
-for p in $(cat $CONFIG_FILE | jq -r '.default.CloudFront.InvalidationPaths?//[]|.[]|.'); do 
+for p in $(cat $CONFIG_FILE | jq -r '.default.CloudFront.InvalidationPaths? //[]|.[]|.'); do 
     test -n "$VERBOSE" && echo "adding custom invalidation path: $p" >&2
     INVALIDATION_PATHS+=("$p")
 done

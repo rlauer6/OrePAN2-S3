@@ -1,3 +1,5 @@
 *.gz
 index.html
 t/
+lib/**/*.pm
+*.tmp
