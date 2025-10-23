@@ -14,7 +14,7 @@ Options
   -P, --prefix           Path prefix in the S3 bucket
   -b, --bucket           S3 Bucket Name
   -p, --profile          AWS Profile
-  -N, --profile-name     orepan2-add config profile name
+  -n, --profile-name     orepan2-add config profile name
   -x, --no-invalidate    Do not invalidate cache
   -c, --config           Config file name (default: .orepan2-s3.json)
   -r, --region           AWS region (default: us-east-1)
@@ -270,6 +270,7 @@ add() {
 ########################################################################
 set_defaults() {
 ########################################################################
+
     local profile_name=$(find_config_name "$CONFIG_FILE" "$PROFILE_NAME")
     local config=$(cat "$CONFIG_FILE" | jq -r ".$profile_name")
 
@@ -277,7 +278,7 @@ set_defaults() {
     test -z "$AWS_REGION" && AWS_REGION=$(echo "$config" | jq -r '.AWS.region // "us-east-1"')
     test -z "$DISTRIBUTION_ID" && DISTRIBUTION_ID=$(echo "$config" | jq -r '.CloudFront.DistributionId // ""')
     test -z "$PATH_PREFIX" && PATH_PREFIX=$(echo "$config" | jq -r '.AWS.prefix // ""')
-    test -z "$BUCKET" && BUCKET=$(echo "$config" | jq -r '.AWS.bucket // ""')
+    test -z "$BUCKET" && BUCKET=$(echo "$config" | jq -r '.AWS.bucket? // ""')
 
     AWS_ACCOUNT=$(echo "$CONFIG" | jq -r '.AWS.account // ""')
     test -z "$AWS_ACCOUNT" && AWS_ACCOUNT=$($AWS sts get-caller-identity --query 'Account' --output text --profile "$AWS_PROFILE")
