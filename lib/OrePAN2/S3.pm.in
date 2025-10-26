@@ -65,9 +65,9 @@ sub slurp_file {
 ########################################################################
 sub fetch_config {
 ########################################################################
-  my ( $self, $profile ) = @_;
+  my ( $self, $profile_name ) = @_;
 
-  $profile //= 'default';
+  $profile_name //= $self->get_profile_name // 'default';
 
   my $file = $self->get_config_file;
 
@@ -82,8 +82,8 @@ sub fetch_config {
   die "could not read config file ($file)\n$EVAL_ERROR"
     if !$config || $EVAL_ERROR;
 
-  if ( $config->{$profile} ) {
-    $config = $config->{$profile};
+  if ( $config->{$profile_name} ) {
+    $config = $config->{$profile_name};
   }
 
   $self->set_config($config);
@@ -581,15 +581,20 @@ sub main {
         config-file|c=s
         output|o=s
         profile|p=s
+        profile-name|n=s
         template|t=s
         url|U=s
         distribution|d=s
         upload|u
       )
     ],
-    default_options => { config_file => $DEFAULT_CONFIG, profile => 'default' },
-    extra_options   => [qw(config s3 credentials template)],
-    commands        => {
+    default_options => {
+      config_file  => $DEFAULT_CONFIG,
+      profile_name => 'default',
+      profile      => $ENV{AWS_PROFILE}
+    },
+    extra_options => [qw(config s3 credentials template)],
+    commands      => {
       'create-docs'   => \&create_docs,
       create          => \&create_index,
       show            => \&show_orepan_index,

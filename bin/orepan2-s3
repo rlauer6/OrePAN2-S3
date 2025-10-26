@@ -14,7 +14,7 @@ Options
   -P, --prefix           Path prefix in the S3 bucket
   -b, --bucket           S3 Bucket Name
   -p, --profile          AWS Profile
-  -n, --profile-name     orepan2-add config profile name
+  -n, --name             orepan2-add config profile name
   -x, --no-invalidate    Do not invalidate cache
   -c, --config           Config file name (default: .orepan2-s3.json)
   -r, --region           AWS region (default: us-east-1)
@@ -164,7 +164,7 @@ create_index() {
     local config=$(find_config "$CONFIG_FILE" "$PROFILE_NAME")
 
     if test -n "$PROFILE_NAME"; then
-        config_profile="--profile $PROFILE_NAME"
+        config_profile="--profile-name $PROFILE_NAME"
     fi
 
     local template="${TEMPLATE:-}"
