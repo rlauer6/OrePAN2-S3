@@ -82,9 +82,15 @@ sub fetch_config {
   die "could not read config file ($file)\n$EVAL_ERROR"
     if !$config || $EVAL_ERROR;
 
-  if ( $config->{$profile_name} ) {
+  if ( $config->{$profile_name} && ref $config->{$profile_name} ) {
     $config = $config->{$profile_name};
   }
+  elsif ( $config->{$profile_name} ) {
+    $config = $config->{ $config->{$profile_name} };
+  }
+
+  croak sprintf "ERROR: %s not a valid profile name\n", $profile_name
+    if !ref $config;
 
   $self->set_config($config);
 
@@ -356,6 +362,8 @@ sub create_index {
 ########################################################################
   my ($self) = @_;
 
+  my $config = $self->get_config;
+
   my $file = $self->fetch_orepan_index;
 
   my $repo = $self->parse_index($file);
@@ -375,10 +383,18 @@ sub create_index {
 
   my $utils = bless {}, 'utils';
 
-  my %app_plugins;
-  my %plugins;
+  my $sections = $config->{custom_sections} // {};
+
+  foreach my $var ( keys %{$sections} ) {
+    my ( $qr, $flags ) = @{ $sections->{$var} };
+    $sections->{$var} = [ $qr, $flags, eval "qr/$qr/$flags" ];
+  }
+
   my %readme_links;
   my %pod_links;
+
+  my %app_plugins;
+  my %plugins;
 
   foreach my $distribution ( keys %{$repo} ) {
 
@@ -400,22 +416,24 @@ sub create_index {
       $pod_links{$distribution} = $pod;
     }
 
-    if ( $distribution =~ /^BLM\-Startup/xsm ) {
-      $app_plugins{$distribution} = delete $repo->{$distribution};
-    }
-    elsif ( $distribution =~ /^BLM/xsm ) {
-      $plugins{$distribution} = $repo->{$distribution};
+    if ($sections) {
+      foreach my $var ( keys %{$sections} ) {
+        if ( $distribution =~ $sections->{$var}->[2] ) {
+          $sections->{$var}->[3] //= {};
+          $sections->{$var}->[3]->{$distribution} = delete $repo->{$distribution};
+        }
+      }
     }
   }
 
   my $params = {
     utils        => $utils,
     repo         => $repo,
-    plugins      => \%plugins,
-    app_plugins  => \%app_plugins,
     readme_links => \%readme_links,
     pod_links    => \%pod_links,
     localtime    => scalar localtime,
+    map { ( $_ => $sections->{$_}->[3] ) } keys %{$sections},
+
   };
 
   $self->get_logger->trace( Dumper( [ params => $params ] ) );
@@ -512,9 +530,9 @@ sub init {
 ########################################################################
   my ($self) = @_;
 
-  $self->fetch_config;
+  my $config = $self->fetch_config;
 
-  my $profile = $self->get_config->{AWS}->{profile};
+  my $profile = $config->{AWS}->{profile};
 
   my $credentials = Amazon::Credentials->new( profile => $profile );
 
@@ -680,9 +698,13 @@ L<here|https://github.com/rlauer6/OrePAN2-S3/blob/master/README.md>.
 
 =head1 USAGE
 
- orepan2-s3 Options Command
+ orepan2-s3.pl Options Command
 
-Script for maintaining a DarkPAN mirror using S3 + CloudFront
+Perl script for maintaining a DarkPAN mirror using S3 + CloudFront.
+
+I<NOTE: C<orepan2-s3> is the bash script that calls this Perl
+script. The documentation here refers to the Perl script, however you
+should use the bash script in practice.>
 
 =head2 Commmands
 
@@ -707,7 +729,8 @@ Script for maintaining a DarkPAN mirror using S3 + CloudFront
  -h, --help           Display this help message
  -c, --config-file    Name of the configuration file (default: ~/.orepan2-s3.json)
  -o, --output         Name of the output file
- -p, --profile        Name of a profile inside the config file
+ -p, --profile        Your AWS profile if not provide in configuration
+ -n  --profile-name   Name of a profile inside the config file
  -t, --template       Name of a template that will be used as the index.html page
  -d, --distribution   Path to distribution tarball
  -u, --upload         Upload files after processing (for create-index, create-docs)
@@ -716,10 +739,11 @@ Script for maintaining a DarkPAN mirror using S3 + CloudFront
 =head2 Configuration File
 
 The configuration file for C<orepan2-s3> is a JSON file that can
-contain multiple profiles (or none). The format should look something
-like this:
+contain multiple profiles (or none). Each profile represents a DarkPAN
+S3 repository. The format should look something like this:
 
   {
+      "default" : "bedrock",
       "tbc" : {
           "AWS": {
               "profile" : "prod",
@@ -731,7 +755,7 @@ like this:
               "DistributionId" : "E2ABCDEFGHIJK"
           }
       },
-      "default" : {
+      "bedrock" : {
           "index" : {
               "template" : "/path/to/template",
               "files": {
@@ -752,8 +776,11 @@ like this:
       }
   }
 
-Each profile can contain up to 3 sections (AWS, CloudFront, index). If you only
-have one profile you don't need place it in a 'default' section.
+Each profile can contain the keys described below. If you only have one
+profile you don't need place it in a 'default' section.
+
+The value for the 'default' key can be the name of a profile or a hash
+of the profile.
 
 =over 5
 
@@ -767,7 +794,7 @@ This section allows you to create custom template for the DarkPAN home page.
 
 The name of a template file that will be parsed and uploaded as
 F</index.html>. If you do not provide a template file a default
-template. The default template is a L<Template::Toolkit> style
+template is used. The default template is a L<Template::Toolkit> style
 template. To see the default template use the C<dump-template> command
 to the F<orepan2-index> script.
 
@@ -780,7 +807,7 @@ The templating process is provided with these variables:
 =item utils
 
 A blessed reference to an object with one method (C<module_name>) that
-returns a verison of the module_name suitable for use as unique id.
+returns a verison of the module name suitable for use as unique CSS id.
 
 =item repo
 
@@ -795,11 +822,24 @@ form:
 
 The current time and date as a string.
 
+=item pod_links
+
+A hash where the keys are distribution names and the values are links
+to the POD for a module.
+
+=item readme_links
+
+A hash where the keys are distribution names and the values are links
+to a README for a module.
+
+I<NOTE: Sometimes the README and the POD will contain the same information.>
+
 =back
 
 =item files
 
-A hash of source/destination pairs that specify additional files to upload.
+A hash of source/destination pairs that specify additional files you
+want uploaded to your S3 bucket.
 
 Example:
 
@@ -816,7 +856,7 @@ Example:
 
 =item profile
 
-The IAM profile where the bucket is provisioned.
+The IAM profile that allows access to the S3 bucket and CloudFront.
 
 =item region
 
@@ -833,6 +873,8 @@ The prefix where the CPAN distribution files will be stored. Default: orepan2.
 =back
 
 =item CloudFront
+
+I<NOTE: Your profile must have the ability to invalidate the CloudFront cache!>
 
 =over 10
 
@@ -851,11 +893,41 @@ each month. Thereafter each path costs $0.005 per path.>
 
 =back
 
+=item custom_sections
+
+This section contains key/value pairs the where the key is the name of
+a variable that will be exposed to your template and values represent
+a two element array that contains a regular expresssion and possible
+regexp flags.
+
+Example:
+
+ "custom_sections" : {
+     "plugins" : ["^BLM\-(?!Startup)", "xsm"],
+     "app_plugins" : ["^BLM\-Startup", "xsm"],
+  }
+
+The purpose of this section is to allow you to categorize your
+distributions under possible HTML headings. For example:
+
+  [% FOREACH distribution = app_plugins.sort %]
+        <h2>
+         <span class="collapse-section-icon">&#9660;</span>
+         [% distribution %]
+         [% IF readme_links.$distribution %]
+         <a title="README"  class='doc-link' href="[% readme_links.$distribution %]"><span class="material-symbols-outlined">docs</span></a>
+         [% END %]
+         [% IF pod_links.$distribution %]
+         <a title="pod" class='doc-link' href="[% pod_links.$distribution %]"><span class="material-symbols-outlined">docs</span></a>
+         [% END %]
+        </h2>
+
+
 =back
 
 =head1 AUTHOR
 
-Rob Lauer - <rlauer6@comcast.net>
+Rob Lauer - <bigfoot@cpan.org>
 
 =head1 SEE ALSO
 

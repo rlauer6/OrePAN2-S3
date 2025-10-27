@@ -1,3 +1,18 @@
+Mon Oct 27 09:30:08 2025  Rob Lauer  <rclauer@gmail.com>
+
+	[1.0.3]:
+	* VERSION: bump
+	* lib/OrePAN2/S3.pm.in
+	- update POD
+	(fetch_config): support 'default' as scalar or hash
+	(init): refactored
+	- support 'default' profile name as hash or scalar
+	(create_index)
+	- use custom_sections w/regexp instead of hard coding BLM/BLM-Startup
+	* bin/orepan2-s3
+	- support 'default' profile name as hash or scalar
+	* .gitignore: resources
+
 Sun Oct 26 17:50:18 2025  Rob Lauer  <rclauer@gmail.com>
 
 	[1.0.2]:

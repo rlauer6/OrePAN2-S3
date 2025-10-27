@@ -3,3 +3,4 @@ index.html
 t/
 lib/**/*.pm
 *.tmp
+resources
