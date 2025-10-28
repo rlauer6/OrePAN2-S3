@@ -7,6 +7,8 @@ usage() {
     cat <<EOF
 Usage: $0 options command args
 
+Script for maintaining your DarkPAN repository.
+
 Options
 -------
   -h, --help             Display this help message
@@ -38,7 +40,10 @@ Notes
 
 2. default configuration file is .orepan2-s3.json and should be in your home directory
 
-3. you must provide either -t TAG-VALUE or -d DISTRIBUTION-ID
+3. you must provide either -t TAG-VALUE or -d DISTRIBUTION-ID or set
+the "DistributionID" key in your configuration file if your are using CloudFront
+
+4. See perldoc OrePAN2::S3 for more details
 
 EOF
 
@@ -48,7 +53,6 @@ EOF
 ########################################################################
 find_config_name() {
 ########################################################################
-    set -x
     local config_file="$1"
     local config_profile="${2:-default}"
 
@@ -101,8 +105,8 @@ upload_artifacts() {
         echo "$config" | jq -r '.files| to_entries[] | "\(.key) \(.value)"' |
             while read -r src dest; do
                 if test -e "$src"; then
-                    test -n "$VERBOSE" && echo "uploading $src to => s3://$bucket$dest" >&2
-                    aws s3 $aws_profile --quiet cp "$src" "s3://$bucket$dest" >&2
+                    echo >&2 "uploading $src to => s3://$bucket$dest" >&2
+                    aws s3 $aws_profile $QUIET cp "$src" "s3://$bucket$dest" >&2
                 else
                     echo "$src not found...skipping" >&2
                 fi
@@ -189,7 +193,7 @@ create_index() {
     fi
 
     if test -e "$index_template"; then
-        test -n "$VERBOSE" && echo "creating and uploading index.html from template $index_template..."
+        echo >&2 "creating and uploading index.html from template $index_template..."
     fi
 
     LOG_LEVEL=${LOG_LEVEL:-info}
@@ -197,12 +201,12 @@ create_index() {
     orepan2-s3-index $template $config_profile -c $CONFIG_FILE -u --log-level $LOG_LEVEL create
     
     if test -n "$FILE"; then
-        test -n "$VERBOSE" && echo "extracting and uploading documentation..."
+        echo >&2 "extracting and uploading documentation..."
 
         orepan2-s3-index $config_profile -c $CONFIG_FILE -u create-docs $FILE
     fi
 
-    test -n "$VERBOSE" && echo "looking for artifacts to upload..."
+    echo >&2 "looking for artifacts to upload..."
     upload_artifacts "$config"
 
     rm $index
@@ -222,7 +226,7 @@ invalidate_cache() {
 ########################################################################
 cleanup() {
 ########################################################################
-    test -n "$VERBOSE" && echo "cleaning up temp directory..."
+    echo >&2 "cleaning up temp directory..."
     test -n "$TEMP_DIR" && rm -rf "$TEMP_DIR"
 }
 
@@ -235,17 +239,28 @@ sync_local() {
     test -n "$VERBOSE" && echo "syncing s3://$BUCKET/$PATH_PREFIX => $TEMP_DIR/$PATH_PREFIX..."
 
     # Sync S3 contents to the temporary directory
-    $AWS s3 sync "s3://$BUCKET/$PATH_PREFIX" "$TEMP_DIR/$PATH_PREFIX" --quiet --profile "$AWS_PROFILE"
+    $AWS s3 sync "s3://$BUCKET/$PATH_PREFIX" "$TEMP_DIR/$PATH_PREFIX" $QUIET --profile "$AWS_PROFILE"
+}
+
+########################################################################
+index() {
+########################################################################
+    echo >&2 "indexing OrePAN repository..." >&2
+    orepan2-indexer "$TEMP_DIR/$PATH_PREFIX"
 }
 
 ########################################################################
 index_and_sync_remote() {
 ########################################################################
-    test -n "$VERBOSE" && echo "indexing OrePAN repository..." >&2
-    orepan2-indexer "$TEMP_DIR/$PATH_PREFIX"
+    index
+    sync_remote
+}
 
-    test -n "$VERBOSE" && echo "syncing $TEMP_DIR/$PATH_PREFIX => s3://$BUCKET/$PATH_PREFIX..."
-    $AWS s3 sync "$TEMP_DIR/$PATH_PREFIX" "s3://$BUCKET/$PATH_PREFIX" --quiet --profile "$AWS_PROFILE"
+########################################################################
+sync_remote() {
+########################################################################
+    echo >&2 "syncing $TEMP_DIR/$PATH_PREFIX => s3://$BUCKET/$PATH_PREFIX..."
+    $AWS s3 sync "$TEMP_DIR/$PATH_PREFIX" "s3://$BUCKET/$PATH_PREFIX" $QUIET --profile "$AWS_PROFILE"
 }
 
 ########################################################################
@@ -263,7 +278,7 @@ add() {
 
     sync_local;
 
-    test -n "$VERBOSE" && echo "adding $FILE to OrePAN package index..."
+    echo >&2 "injecting $FILE to OrePAN package index..."
 
     orepan2-inject "$FILE" "$TEMP_DIR/$PATH_PREFIX"
 
@@ -273,7 +288,7 @@ add() {
         exit 1
     fi
 
-    index_and_sync_remote;
+    sync_remote;
 }
 
 ########################################################################
@@ -312,6 +327,7 @@ NOT_OK="ERROR"
 OK=""
 INDEX_TEMPLATE=""
 VERBOSE=""
+QUIET="--quiet"
 TEMP_DIR=""
 LOG_LEVEL=""
 
@@ -335,7 +351,8 @@ while true; do
 
         -v|--verbose)
             VERBOSE="1";
-            LOG_LEVEL=debug;
+            QUIET="";
+            LOG_LEVEL=trace;
             shift 1;
             ;;
 

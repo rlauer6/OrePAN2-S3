@@ -6,7 +6,6 @@ use warnings;
 use Amazon::Credentials;
 use Amazon::S3;
 use Archive::Tar;
-use Template;
 use Carp;
 use Carp::Always;
 use Data::Dumper;
@@ -16,8 +15,9 @@ use English qw(-no_match_vars);
 use File::Basename qw(basename);
 use File::Temp qw(tempfile);
 use JSON;
-use Scalar::Util qw(openhandle);
 use OrePAN2::Index;
+use Scalar::Util qw(openhandle);
+use Template;
 use YAML;
 
 use Readonly;
@@ -686,7 +686,7 @@ __DATA__
 
 =head1 NAME
 
-orepan2-s3
+ orepan2-s3
 
 =head1 DESCRIPTION
 
@@ -704,7 +704,7 @@ Perl script for maintaining a DarkPAN mirror using S3 + CloudFront.
 
 I<NOTE: C<orepan2-s3> is the bash script that calls this Perl
 script. The documentation here refers to the Perl script, however you
-should use the bash script in practice.>
+should use the bash script for adding and deleting CPAN distributions from your DarkPAN repo.>
 
 =head2 Commmands
 
@@ -884,6 +884,16 @@ CloudFront distribution id
 
 =item InvalidationPaths
 
+C<OrePAN2::S3> is designed to work with CloudFront + Amazon
+S3. CloudFront is a CDN and will read content from your S3 bucket when
+clients make HTTP requests. CloudFront will cache content to avoid
+costly reads to the S3 bucket. If you change some of the static assets
+(like the index page) you make want to invalidate the cache to see
+your new assets. You could wait until the cache is updated (the
+default time is 24 hours)...but why?  The script will automatically
+invalidate the cache for you if you tell it what assets to invalidate
+when you add a new distribution.
+
 An array of additional paths to invalidate when adding new distributions.
 
 I<Note: There is no additional charge for adding additional
@@ -895,10 +905,15 @@ each month. Thereafter each path costs $0.005 per path.>
 
 =item custom_sections
 
-This section contains key/value pairs the where the key is the name of
-a variable that will be exposed to your template and values represent
-a two element array that contains a regular expresssion and possible
-regexp flags.
+This section contains key/value pairs where the key is the name of a
+variable that will be exposed to your template and the values
+are a two element array that contains a regular expresssion and
+possible regexp flags. The script will use the regexp to filter your
+distributions and add them to a hash whose name is the key you
+provided.
+
+The purpose of this section is to allow you to possibly organize your
+distributions under possible HTML headings.
 
 Example:
 
@@ -907,9 +922,10 @@ Example:
      "app_plugins" : ["^BLM\-Startup", "xsm"],
   }
 
-The purpose of this section is to allow you to categorize your
-distributions under possible HTML headings. For example:
+...then in your template:
 
+      <h1>Application Plugin Index</h1>
+      
   [% FOREACH distribution = app_plugins.sort %]
         <h2>
          <span class="collapse-section-icon">&#9660;</span>
@@ -921,7 +937,14 @@ distributions under possible HTML headings. For example:
          <a title="pod" class='doc-link' href="[% pod_links.$distribution %]"><span class="material-symbols-outlined">docs</span></a>
          [% END %]
         </h2>
-
+  
+        <ul class="collapsable" id="[% utils.module_name(distribution) %]">
+  [% FOREACH module IN app_plugins.$distribution %]
+          <li>[%  module.0 %]</li>
+  [% END %]
+        </ul>
+  [% END %]
+     <hr>
 
 =back
 
