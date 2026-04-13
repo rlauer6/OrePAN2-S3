@@ -172,7 +172,7 @@ create_index() {
     index=$(mktemp)
     
     local config_profile=""
-    local index_template="$INDEX_TEMPLATE{:-}"
+    local index_template="${INDEX_TEMPLATE:-}"
 
     local config=$(find_config "$CONFIG_FILE" "$PROFILE_NAME")
 
@@ -201,9 +201,9 @@ create_index() {
     orepan2-s3-index $template $config_profile -c $CONFIG_FILE -u --log-level $LOG_LEVEL create
     
     if test -n "$FILE"; then
-        echo >&2 "extracting and uploading documentation..."
+        echo >&2 "extracting and uploading documentation...($FILE)"
 
-        orepan2-s3-index $config_profile -c $CONFIG_FILE -u create-docs $FILE
+        orepan2-s3-index $config_profile -c $CONFIG_FILE --log-level $LOG_LEVEL -u create-docs $FILE
     fi
 
     echo >&2 "looking for artifacts to upload..."
@@ -311,7 +311,7 @@ set_defaults() {
 ########################################################################
 # MAIN SCRIPT STARTS HERE
 ########################################################################
-set -oue pipefail
+set -euo pipefail
 
 # Initialize variables
 CONFIG_FILE=""
@@ -486,15 +486,17 @@ case "$COMMAND" in
 
         FILE="";
 
-        create_index;
+        if create_index; then
 
-        if test -z "$NO_INVALIDATE"; then
-            if test -n "$DISTRIBUTION_ID"; then
-                test -n "$VERBOSE" && echo "invalidating cache...\n${INVALIDATION_PATHS[@]}"
-                invalidate_cache
+            if test -z "$NO_INVALIDATE"; then
+                if test -n "$DISTRIBUTION_ID"; then
+                    test -n "$VERBOSE" && echo "invalidating cache...\n${INVALIDATION_PATHS[@]}"
+                    invalidate_cache
+                fi
             fi
+        else
+            echo >&2 "$NOT_OK: could not create index"
         fi
-
         ;;
 
     index)
@@ -512,13 +514,16 @@ case "$COMMAND" in
 
         test -n "$VERBOSE" && echo "creating HTML index..." >&2
 
-        create_index
+        if create_index; then
 
-        if test -z "$NO_INVALIDATE"; then
-            if test -n "$DISTRIBUTION_ID"; then
-                test -n "$VERBOSE" && echo "invalidating cache...\n${INVALIDATION_PATHS[@]}"
-                invalidate_cache
+            if test -z "$NO_INVALIDATE"; then
+                if test -n "$DISTRIBUTION_ID"; then
+                    test -n "$VERBOSE" && echo "invalidating cache...\n${INVALIDATION_PATHS[@]}"
+                    invalidate_cache
+                fi
             fi
+        else
+            echo >&2 "$NOT_OK: could not create index"
         fi
         ;;
         

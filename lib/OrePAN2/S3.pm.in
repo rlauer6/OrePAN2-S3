@@ -7,11 +7,13 @@ use Amazon::Credentials;
 use Amazon::S3;
 use Archive::Tar;
 use Carp;
-use Carp::Always;
+use CLI::Simple::Utils qw(choose);
+use CLI::Simple::Constants qw(:booleans);
 use Data::Dumper;
 use DarkPAN::Utils qw(parse_distribution_path);
 use DarkPAN::Utils::Docs;
 use English qw(-no_match_vars);
+use Encode qw(encode_utf8);
 use File::Basename qw(basename);
 use File::Temp qw(tempfile);
 use JSON;
@@ -24,8 +26,6 @@ use Readonly;
 
 Readonly::Scalar our $PACKAGE_INDEX  => '02packages.details.txt.gz';
 Readonly::Scalar our $DEFAULT_CONFIG => $ENV{HOME} . '/.orepan2-s3.json';
-Readonly::Scalar our $TRUE           => 1;
-Readonly::Scalar our $FALSE          => 0;
 
 use parent qw(CLI::Simple);
 
@@ -121,14 +121,12 @@ sub get_bucket {
 ########################################################################
 sub fetch_orepan_index {
 ########################################################################
-  my ( $self, $unlink ) = @_;
-
-  $unlink //= $TRUE;
+  my ($self) = @_;
 
   my ( $fh, $filename ) = tempfile(
     'XXXXXX',
     SUFFIX => '.gz',
-    UNLINK => $unlink,
+    UNLINK => $FALSE,
   );
 
   my $config = $self->get_config;
@@ -142,12 +140,13 @@ sub fetch_orepan_index {
 }
 
 ########################################################################
-sub invalidate_index {
+sub cmd_invalidate_index {
 ########################################################################
   my ($self) = @_;
 
-  # TBD
-  return;
+  warn "Not implemented yet\n";
+
+  return $SUCCESS;
 }
 
 ########################################################################
@@ -187,18 +186,18 @@ sub _upload_html {
 
   my $bucket = $self->get_bucket();
 
-  if ( ref $file ) {
-    $bucket->add_key( $key, ${$file}, $attr );
-  }
-  else {
-    $bucket->add_key_filename( $key, $file, $attr );
-  }
+  my $content = ref $file ? ${$file} : slurp_file($file);
+
+  # in _upload_html, before add_key:
+  my $encoded = encode_utf8($content);
+
+  $bucket->add_key( $key, $encoded, $attr );
 
   return;
 }
 
 ########################################################################
-sub upload_index {
+sub cmd_upload_index {
 ########################################################################
   my ( $self, $index ) = @_;
 
@@ -212,7 +211,7 @@ sub upload_index {
 }
 
 ########################################################################
-sub show_orepan_index {
+sub cmd_show_orepan_index {
 ########################################################################
   my ($self) = @_;
 
@@ -224,11 +223,13 @@ sub show_orepan_index {
 
   my $listing = $index->as_string;
 
+  unlink $file;
+
   return $self->send_output($listing);
 }
 
 ########################################################################
-sub create_docs {
+sub cmd_create_docs {
 ########################################################################
   my ($self) = @_;
 
@@ -238,25 +239,35 @@ sub create_docs {
   die "use -d or pass distribution name as an argument\n"
     if !$distribution;
 
-  $distribution = basename($distribution);
-
-  if ( $distribution !~ /^D\/DU/xsm ) {
-    $distribution = sprintf 'D/DU/DUMMY/%s', $distribution;
-  }
-
   my ( $key_prefix, $version ) = parse_distribution_path($distribution);
+
+  my $dpu = choose {
+    if ( -e $distribution && $distribution !~ /^(?:http|D\/DU)/xsm ) {
+      my $tar = Archive::Tar->new;
+      $tar->read($distribution);
+      return DarkPAN::Utils->new( package => $tar );
+    }
+
+    $distribution = basename($distribution);
+
+    if ( $distribution !~ /^http/xsm ) {
+      $distribution = sprintf 'D/DU/DUMMY/%s', $distribution;
+    }
+
+    my $orepan_url = $self->get_url // $self->get_config->{url};
+
+    die "use --url or set url in config\n"
+      if !$orepan_url;
+
+    my $dpu = DarkPAN::Utils->new( base_url => $orepan_url );
+
+    $dpu->fetch_package($distribution);
+
+    return $dpu;
+  };
 
   my $module_name = $key_prefix;
   $module_name =~ s/\-/::/gxsm;
-
-  my $orepan_url = $self->get_url // $self->get_config->{url};
-
-  die "use --url or set url in config\n"
-    if !$orepan_url;
-
-  my $dpu = DarkPAN::Utils->new( base_url => $orepan_url );
-
-  $dpu->fetch_package($distribution);
 
   my $file = $dpu->extract_module( $distribution, $module_name );
 
@@ -266,7 +277,6 @@ sub create_docs {
         name    => "$key_prefix.html",
         content => $file,
         prefix  => $key_prefix,
-        pod     => $TRUE,
         wrap    => $TRUE,
       );
     }
@@ -307,24 +317,17 @@ sub upload_html {
 ########################################################################
   my ( $self, %args ) = @_;
 
-  my ( $content, $pod, $prefix, $name ) = @args{qw(content pod prefix name)};
+  my ( $content, $prefix, $name ) = @args{qw(content prefix name)};
 
   my $perldoc_url_prefix = $self->get_config->{perldoc_url_prefix};
 
   my $docs = DarkPAN::Utils::Docs->new( text => $content, url_prefix => $perldoc_url_prefix );
 
-  if ($pod) {
-    $docs->parse_pod;
-  }
-  else {
-    $docs->to_html;
-  }
-
   my $html = $docs->get_html;
 
   if ( $args{wrap} ) {
     $html = <<"END_OF_HTML";
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<!DOCTYPE HTML>
 <html>
  <head>
    <title>README</title>
@@ -358,7 +361,7 @@ sub look_for_object {
 }
 
 ########################################################################
-sub create_index {
+sub cmd_create_index {
 ########################################################################
   my ($self) = @_;
 
@@ -368,9 +371,11 @@ sub create_index {
 
   my $repo = $self->parse_index($file);
 
+  unlink $file;
+
   $self->get_logger->debug( Dumper( [ repo => $repo ] ) );
 
-  no strict 'refs';  ## no critic
+  no strict 'refs'; ## no critic
 
   *{'utils::module_name'} = sub {
     my ( $self, $distribution ) = @_;
@@ -392,9 +397,6 @@ sub create_index {
 
   my %readme_links;
   my %pod_links;
-
-  my %app_plugins;
-  my %plugins;
 
   foreach my $distribution ( keys %{$repo} ) {
 
@@ -509,13 +511,13 @@ sub parse_index {
 }
 
 ########################################################################
-sub download_orepan_index {
+sub cmd_download_orepan_index {
 ########################################################################
   my ($self) = @_;
 
   my $filename = eval { return $self->fetch_orepan_index(); };
 
-  die "could not download $PACKAGE_INDEX\n$EVAL_ERROR"
+  die "ERROR: Could not download $PACKAGE_INDEX\n$EVAL_ERROR"
     if !$filename || !-s "$filename";
 
   rename $filename, $PACKAGE_INDEX;
@@ -584,9 +586,7 @@ sub extract_from_tarball {
   croak "file not found ($prefix/$file)"
     if !$t->contains_file("$prefix/$file");
 
-  my $content = eval { return Load( $t->get_content("$prefix/$file") ); };
-
-  return $content;
+  return $t->get_content("$prefix/$file");
 }
 
 ########################################################################
@@ -613,12 +613,13 @@ sub main {
     },
     extra_options => [qw(config s3 credentials template)],
     commands      => {
-      'create-docs'   => \&create_docs,
-      create          => \&create_index,
-      show            => \&show_orepan_index,
-      download        => \&download_orepan_index,
-      upload          => \&upload_index,
-      'dump-template' => sub {
+      'create-docs'      => \&cmd_create_docs,
+      create             => \&cmd_create_index,
+      show               => \&cmd_show_orepan_index,
+      download           => \&cmd_download_orepan_index,
+      upload             => \&cmd_upload_index,
+      'invalidate-index' => \&cmd_invalidate_index,
+      'dump-template'    => sub {
         print {*STDOUT} shift->get_template;
         return 0;
       }
@@ -631,7 +632,7 @@ sub main {
 1;
 
 __DATA__
-<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<!DOCTYPE HTML>
 <html>
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=iso-8859-15">
@@ -686,33 +687,57 @@ __DATA__
 
 =head1 NAME
 
- orepan2-s3
+ OrePAN2::S3 - Manage a DarkPAN CPAN mirror on Amazon S3
+
+=head1 SYNOPSIS
+
+  # via the bash wrapper (recommended)
+  orepan2-s3 add My-Dist-1.0.tar.gz
+  orepan2-s3 index
+
+  # or directly via the modulino
+  orepan2-s3-index create --upload
 
 =head1 DESCRIPTION
 
-This script is used to add distributions to your own DarkPAN
+This class is used to add distributions to your own DarkPAN
 repository housed on Amazon's S3 storage. It leverages L<OrePAN2> to
 create and maintain your own DarkPAN repository. You can read more
 about setting up a DarkPAN on Amazon using S3 + Cloudfront
 L<here|https://github.com/rlauer6/OrePAN2-S3/blob/master/README.md>.
 
+You can read more about creating a secure static website using Amazon
+S3 L<here|https://blog.tbcdevelopmentgroup.com/2025-02-18-post.html>.
+
 =head1 USAGE
 
- orepan2-s3.pl Options Command
+ orepan2-s3 options command
 
 Perl script for maintaining a DarkPAN mirror using S3 + CloudFront.
 
-I<NOTE: C<orepan2-s3> is the bash script that calls this Perl
-script. The documentation here refers to the Perl script, however you
-should use the bash script for adding and deleting CPAN distributions from your DarkPAN repo.>
+I<NOTE: C<orepan2-s3> is the bash script that calls this Perl class
+that doubles as a modulino.  The documentation here refers to the
+script (not the class)>.
 
-=head2 Commmands
+=head2 Options
+
+ -h, --help           Display this help message
+ -c, --config-file    Name of the configuration file (default: ~/.orepan2-s3.json)
+ -o, --output         Name of the output file
+ -p, --profile        Your AWS profile if not provided in configuration
+ -n, --profile-name   Name of a profile inside the config file
+ -t, --template       Name of a template that will be used as the index.html page
+ -d, --distribution   Path to distribution tarball
+ -u, --upload         Upload files after processing (for create-index, create-docs)
+ -U, --url            Cloudfront URL
+
+=head2 Commands
 
 =over 5
 
 =item * create - Create a new F<index.html> from the mirror's manifest file.
 
-=item * download - Download the mirror's manifest file (F<02packages.details.text.gz>).
+=item * download - Download the mirror's manifest file (F<02packages.details.txt.gz>).
 
 =item * show - Print the manifest file to STDOUT or a file.
 
@@ -722,19 +747,30 @@ should use the bash script for adding and deleting CPAN distributions from your 
 
 =item * create-docs - parse distribution looking for a README.md and/or pod
 
+=item * invalidate-index - I<not currently implemented>
+
 =back
 
-=head2 Options
+=head2 Notes
 
- -h, --help           Display this help message
- -c, --config-file    Name of the configuration file (default: ~/.orepan2-s3.json)
- -o, --output         Name of the output file
- -p, --profile        Your AWS profile if not provide in configuration
- -n  --profile-name   Name of a profile inside the config file
- -t, --template       Name of a template that will be used as the index.html page
- -d, --distribution   Path to distribution tarball
- -u, --upload         Upload files after processing (for create-index, create-docs)
- -U, --url            Cloudfront URL
+=over 5
+
+=item The preferred way of using this utility is through the bash wrapper.
+
+I<The following commands are available only through the C<orepan2-s3>
+bash wrapper, not the modulino directly:>
+
+=over 5
+
+=item * add {file} - inject a tarball into the repository and re-index
+
+=item * delete {file} - remove a distribution and re-index
+
+=item * invalidate - invalidate the CloudFront cache
+
+=back
+
+=back
 
 =head2 Configuration File
 
@@ -777,7 +813,7 @@ S3 repository. The format should look something like this:
   }
 
 Each profile can contain the keys described below. If you only have one
-profile you don't need place it in a 'default' section.
+profile you don't need to place it in a 'default' section.
 
 The value for the 'default' key can be the name of a profile or a hash
 of the profile.
@@ -796,9 +832,9 @@ The name of a template file that will be parsed and uploaded as
 F</index.html>. If you do not provide a template file a default
 template is used. The default template is a L<Template::Toolkit> style
 template. To see the default template use the C<dump-template> command
-to the F<orepan2-index> script.
+to the F<orepan2-s3-index> script.
 
- orepan2-index dump-template
+ orepan2-s3-index dump-template
 
 The templating process is provided with these variables:
 
@@ -807,7 +843,7 @@ The templating process is provided with these variables:
 =item utils
 
 A blessed reference to an object with one method (C<module_name>) that
-returns a verison of the module name suitable for use as unique CSS id.
+returns a version of the module name suitable for use as unique CSS id.
 
 =item repo
 
@@ -843,7 +879,7 @@ want uploaded to your S3 bucket.
 
 Example:
 
- "files" { 
+ "files": { 
     "/home/rlauer/git/some-project/foo.css" : "/css/foo.css",
     "/home/rlauer/git/some-project/foo.js" : "/javascript/foo.js"
  }
@@ -888,7 +924,7 @@ C<OrePAN2::S3> is designed to work with CloudFront + Amazon
 S3. CloudFront is a CDN and will read content from your S3 bucket when
 clients make HTTP requests. CloudFront will cache content to avoid
 costly reads to the S3 bucket. If you change some of the static assets
-(like the index page) you make want to invalidate the cache to see
+(like the index page) you may want to invalidate the cache to see
 your new assets. You could wait until the cache is updated (the
 default time is 24 hours)...but why?  The script will automatically
 invalidate the cache for you if you tell it what assets to invalidate
@@ -907,7 +943,7 @@ each month. Thereafter each path costs $0.005 per path.>
 
 This section contains key/value pairs where the key is the name of a
 variable that will be exposed to your template and the values
-are a two element array that contains a regular expresssion and
+are a two element array that contains a regular expression and
 possible regexp flags. The script will use the regexp to filter your
 distributions and add them to a hash whose name is the key you
 provided.
@@ -950,11 +986,11 @@ Example:
 
 =head1 AUTHOR
 
-Rob Lauer - <bigfoot@cpan.org>
+Rob Lauer - <rlauer@treasurersbriefcase.com>
 
 =head1 SEE ALSO
 
-L<OrePAN2>, L<Amazon::S3>
+L<OrePAN2>, L<Amazon::S3>, L<DarkPAN::Utils>, L<CLI::Simple>, L<Template>
 
 =head1 LICENSE
 
