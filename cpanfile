@@ -1,0 +1,14 @@
+requires "Amazon::Credentials", "1.2.1";
+requires "Amazon::S3", "0.65";
+requires "Archive::Tar", "3.02_001";
+requires "CLI::Simple", "2.0.0";
+requires "CLI::Simple::Constants", "2.0.0";
+requires "CLI::Simple::Utils", "2.0.0";
+requires "DarkPAN::Utils", "1.0.0";
+requires "DarkPAN::Utils::Docs", "1.0.0";
+requires "JSON", "4.10";
+requires "OrePAN2::Index", "0";
+requires "Readonly", "2.05";
+requires "Template", "3.102";
+requires "Text::Markdown::Discount", "0.18";
+requires "YAML", "1.31";

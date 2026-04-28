@@ -1,3 +1,37 @@
+Tue Apr 28 07:57:26 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[1.1.0]: CPAN::Maker::Bootstrapper build refactor
+	* release-notes-1.1.0.md: new
+	* .gitignore: modified
+	* .includes/release-notes.mk: modified
+	* Makefile: updated from CPAN::Maker::Bootstrapper
+	* README.md:
+	* VERSION: bumped
+	* lib/OrePAN2/S3.pm.in
+	(upload_html): fix eval qr vulnerability
+	(cmd_create_index): likewise
+	* requires
+	- bump versions
+	* test-requires
+	- -Test::More (is core)
+
+	[1.0.0]: deleted
+	* provides: deleted
+
+	[1.0.0]: renamed
+	* .includes/release-notes.mk: renamed
+	* .includes/version.mk: renamed
+
+	[1.1.0]: new
+	* version.mk: modified
+	* .includes/git.mk: new
+	* .includes/help.mk: new
+	* .includes/perl.mk: new
+	* .includes/update.mk: new
+	* .includes/upgrade.mk: new
+	* cpanfile: new
+	* t/00-orepan2-s3.t: new
+
 Tue Apr 28 06:38:25 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[1.0.6]:
