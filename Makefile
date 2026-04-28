@@ -22,6 +22,7 @@ SCANDEPS       := $(shell command -v scandeps-static.pl)
 POD2MARKDOWN   := $(shell command -v pod2markdown)
 GIT            := $(shell command -v git)
 PODEXTRACT     := $(shell command -v podextract)
+MD_UTILS       := $(shell command -v md-utils.pl)
 
 GIT_NAME     ?= $(shell $(GIT) config --global user.name || echo "Anonymouse")
 GIT_EMAIL    ?= $(shell $(GIT) config --global user.email || echo "anonymouse@example.org")
@@ -84,13 +85,13 @@ TARBALL = $(PROJECT_NAME)-$(VERSION).tar.gz
 
 DEPS = \
     buildspec.yml \
+    README.md \
     $(MODULE_PATH).in \
     $(PERL_MODULES) \
     $(BIN_FILES) \
     requires \
     test-requires \
     $(UNIT_TEST_NAME) \
-    README.md \
     ChangeLog
 
 all: $(TARBALL)
@@ -115,8 +116,15 @@ $(MODULE_PATH).in: module.pm.tmpl
 $(UNIT_TEST_NAME): $(UNIT_TEST_TEMPLATE)
 	@sed -e 's/[@]MODULE_NAME[@]/$(MODULE_NAME)/' < $< > $@
 
+ifeq ($(wildcard README.md.in),)
+# If README.md.in does NOT exist, use POD2MARKDOWN on the module
 README.md: $(MODULE_PATH)
-	@$(POD2MARKDOWN) $< > $@
+	$(POD2MARKDOWN) $< > $@
+else
+# If README.md.in DOES exist, use MD_UTILS on the template
+README.md: README.md.in
+	$(MD_UTILS) $< > $@
+endif
 
 .PHONY: modulino
 modulino: modulino.tmpl
@@ -244,6 +252,7 @@ include version.mk
 include release-notes.mk
 
 CLEANFILES = \
+    README.md \
     $(BIN_FILES) \
     $(PERL_MODULES) \
     $(POD_MODULES) \
