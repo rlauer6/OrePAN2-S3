@@ -1,3 +1,16 @@
+Tue Apr 28 06:38:25 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[1.0.6]:
+	* release-notes-1.0.6.md: new
+	* VERSION: bump
+	* README.md.in: new
+	* .gitignore: +make.log, make.err
+	* Makefile: tweaks before update
+	* README.md: generated
+	* lib/OrePAN2/S3.pm.in
+	- fix missing documentation files
+	* requires: +Text::Markdown::Discount
+
 Mon Apr 13 12:51:19 2026  Rob Lauer  <rlauer@treasurersbriefcase.com>
 
 	[1.0.5]:

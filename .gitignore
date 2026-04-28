@@ -11,3 +11,5 @@ bin/create-insecure-bucket
 bin/orepan2-s3
 bin/orepan2-s3-index
 module.pm.tmpl
+make.err
+make.log

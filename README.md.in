@@ -1,16 +1,6 @@
 # README
 
-# Table of Contents
-
-* [README](#readme)
-* [Prerequisites](#prerequisites)
-  * [Install this Distribution from CPAN](#install-this-distribution-from-cpan)
-  * [`.orepan2-s3.json`](#orepan2-s3json)
-* [Adding a New Distribution to Your DarkPAN](#adding-a-new-distribution-to-your-darkpan)
-  * [The Default Index](#the-default-index)
-  * [Distribution Documentation](#distribution-documentation)
-* [Using a Website Enabled S3 Bucket](#using-a-website-enabled-s3-bucket)
-  * [WARNING!](#warning!)
+@TOC@
 
 This is the README file for the `OrePAN2::S3` distribution. The intent
 of this project is to create a so-called DarkPAN mirror that serves
@@ -75,7 +65,7 @@ more configuration file options.
 If you are not using a CloudFront distribution (see below), remove or set the
 DistributionId to "".
 
-[Back to Table of Contents](#table-of-contents)
+@TOC_BACK@
 
 # Adding a New Distribution to Your DarkPAN
 
@@ -140,7 +130,7 @@ listing all of your distributions.
   document icon will be displayed. Clicking that icon will display the
   HTML version of the POD from your module.
 
-[Back to Table of Contents](#table-of-contents)
+@TOC_BACK@
 
 # Using a Website Enabled S3 Bucket
 
@@ -169,4 +159,4 @@ Take a look at this [blog
 post](https://blog.tbcdevelopmentgroup.com/2025-02-21-post.html)
 before you blithely lock down your S3 bucket using an IP address.
 
-[Back to Table of Contents](#table-of-contents)
+@TOC_BACK@

@@ -17,8 +17,10 @@ use Encode qw(encode_utf8);
 use File::Basename qw(basename);
 use File::Temp qw(tempfile);
 use JSON;
+use List::Util qw(pairs);
 use OrePAN2::Index;
 use Scalar::Util qw(openhandle);
+use Text::Markdown::Discount;
 use Template;
 use YAML;
 
@@ -26,6 +28,7 @@ use Readonly;
 
 Readonly::Scalar our $PACKAGE_INDEX  => '02packages.details.txt.gz';
 Readonly::Scalar our $DEFAULT_CONFIG => $ENV{HOME} . '/.orepan2-s3.json';
+Readonly::Scalar our $METACPAN_URL   => 'https://metacpan.org/pod';
 
 use parent qw(CLI::Simple);
 
@@ -274,10 +277,11 @@ sub cmd_create_docs {
   if ( $self->get_upload ) {
     if ($file) {
       $self->upload_html(
-        name    => "$key_prefix.html",
-        content => $file,
-        prefix  => $key_prefix,
-        wrap    => $TRUE,
+        name         => "$key_prefix.html",
+        content      => $file,
+        prefix       => $key_prefix,
+        wrap         => $TRUE,
+        distribution => basename($distribution),
       );
     }
   }
@@ -294,10 +298,10 @@ sub cmd_create_docs {
 
   if ( $self->get_upload && $readme ) {
     $self->upload_html(
-      name    => 'README.html',
-      content => $readme,
-      prefix  => $key_prefix,
-      wrap    => $TRUE,
+      name     => 'README.html',
+      markdown => $readme,
+      prefix   => $key_prefix,
+      wrap     => $TRUE,
     );
   }
   elsif ($readme) {
@@ -317,13 +321,36 @@ sub upload_html {
 ########################################################################
   my ( $self, %args ) = @_;
 
-  my ( $content, $prefix, $name ) = @args{qw(content prefix name)};
+  my ( $content, $prefix, $name, $markdown, $distribution ) = @args{qw(content prefix name markdown distribution)};
 
-  my $perldoc_url_prefix = $self->get_config->{perldoc_url_prefix};
+  my $perldoc_url_distros = $self->get_config->{perldoc_url_distros} // [];
+  my $perldoc_url_prefix;
 
-  my $docs = DarkPAN::Utils::Docs->new( text => $content, url_prefix => $perldoc_url_prefix );
+  if ($distribution) {
+    foreach my $p ( pairs @{$perldoc_url_distros} ) {
 
-  my $html = $docs->get_html;
+      my ( $qr, $flags ) = @{$p};
+
+      $qr = eval "qr/$qr/$flags";
+      next if $distribution !~ $qr;
+      $perldoc_url_prefix = $self->get_config->{perldoc_url_prefix};
+      last;
+    }
+  }
+
+  $perldoc_url_prefix //= $METACPAN_URL;
+
+  my $html = choose {
+    return Text::Markdown::Discount::markdown($markdown)
+      if $markdown;
+
+    my $docs = DarkPAN::Utils::Docs->new(
+      text       => $content,
+      url_prefix => $perldoc_url_prefix,
+    );
+
+    return $docs->get_html;
+  };
 
   if ( $args{wrap} ) {
     $html = <<"END_OF_HTML";
@@ -559,9 +586,7 @@ sub fetch_template {
     $template = $index->{template};
   }
 
-  my $fh = *DATA;
-
-  my $index_template = slurp_file( $template // $fh );
+  my $index_template = $template eq 'default' ? slurp_file(*DATA) : slurp_file($template);
 
   $index_template =~ s/\n\n=pod.*$/\n/xsm;
 
