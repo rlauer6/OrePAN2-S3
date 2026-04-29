@@ -22,3 +22,4 @@ resources
 bin/create-insecure-bucket
 bin/orepan2-s3-index
 bin/orepan2-s3
+index.html

@@ -57,7 +57,8 @@ define check_syntax_pm
 	done; \
 	if [[ "$$skip" -eq 0 ]]; then \
 	  module=$$(echo $@ | perl -npe 's{^lib/}{}; s/\//::/g; s/\.pm$$//;'); \
-	  errfile=$$(mktemp) && trap 'rm -f $$errfile' EXIT; \
+	  errfile=$$(mktemp); \
+	  local_cleanfiles="$$local_cleanfiles $$errfile"; \
 	  perl -wc $(PERLINCLUDE) -M"$$module" -e 1 2>$$errfile \
 	    || { rm -f "$@"; cat $$errfile; exit 1; }; \
 	fi
@@ -69,7 +70,8 @@ define check_syntax_pl
 	  [[ "$$f" = "$@" ]] && skip=1 && break; \
 	done; \
 	if [[ "$$skip" -eq 0 ]]; then \
-	  errfile=$$(mktemp) && trap 'rm -f $$errfile' EXIT; \
+	  errfile=$$(mktemp); \
+	  local_cleanfiles="$$local_cleanfiles $$errfile"; \
 	  perl -wc $(PERLINCLUDE) -M"$$module" -e 1 2>$$errfile \
 	    || { rm -f "$@"; cat $$errfile; exit 1; }; \
 	fi

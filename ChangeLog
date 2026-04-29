@@ -1,3 +1,42 @@
+Wed Apr 29 09:02:47 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[1.2.0]:
+	* VERSION: bump minor
+	* release-notes-1.2.0.md: new
+	* .gitignore: index.html
+	* .includes/perl.mk: updated from CPAN::Maker::Bootstrapper
+	* requires
+	- -Amazon::S3
+	- +Amazon::S3::Lite, CPAN::Meta, IO::Compress::Gzip,
+	- +LWP::MediaTypes, Role::Tiny, Role::Tiny::With
+	* cpanfile: likewise
+	* ChangeLog: modified
+	* bin/orepan2-s3.in
+	- refactored out add, upload-artifacts, delete
+	* lib/OrePAN2/S3.pm.in
+	- use roles for new commands inject, delete, upload-artifacts
+	- replace Amazon::S3 with Amazon::S3::Lite
+	- lazy load modules
+	- update pod
+	(write_config): new
+	(get_bucket): removed
+	(get_s3): removed
+	(init_s3): new
+	(fetch_orepan_index)
+	- refactored to use Amazon::S3::Lite
+	(_upload_html): likewise
+	(init): likewise, set author_path
+	(update_index): new
+	(scan_provides): new
+	(_packages_for_archive): new
+	(main)
+	- add new commands, inject, delete, upload-artifacts
+	- new --bucket option
+	* project.mk: new
+	* lib/OrePAN2/S3/Role/Delete.pm.in: new
+	* lib/OrePAN2/S3/Role/Inject.pm.in: new
+	* lib/OrePAN2/S3/Role/UploadArtifacts.pm.in: new
+
 Tue Apr 28 07:57:26 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[1.1.0]: CPAN::Maker::Bootstrapper build refactor

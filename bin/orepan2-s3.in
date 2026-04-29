@@ -88,33 +88,6 @@ find_config() {
 }
 
 ########################################################################
-upload_artifacts() {
-########################################################################
-
-    local bucket="$BUCKET"
-    
-    local config="$1"
-
-    if [[ -n "$config" && -n $(echo "$config" | jq -r '.files? //""') ]]; then
-        local aws_profile="$AWS_PROFILE";
-
-        if test -n "$aws_profile"; then
-            aws_profile="--profile $aws_profile"
-        fi
-
-        echo "$config" | jq -r '.files| to_entries[] | "\(.key) \(.value)"' |
-            while read -r src dest; do
-                if test -e "$src"; then
-                    echo >&2 "uploading $src to => s3://$bucket$dest" >&2
-                    aws s3 $aws_profile $QUIET cp "$src" "s3://$bucket$dest" >&2
-                else
-                    echo "$src not found...skipping" >&2
-                fi
-            done
-    fi
-}
-
-########################################################################
 install_config() {
 ########################################################################
     dist_dir=$(perl -MFile::ShareDir=dist_dir -e 'print dist_dir("OrePAN2-S3");')
@@ -207,7 +180,7 @@ create_index() {
     fi
 
     echo >&2 "looking for artifacts to upload..."
-    upload_artifacts "$config"
+    orepan2-s3-index $config_profile -c $CONFIG_FILE --log-level $LOG_LEVEL upload-artifacts
 
     rm $index
 }
@@ -228,67 +201,6 @@ cleanup() {
 ########################################################################
     echo >&2 "cleaning up temp directory..."
     test -n "$TEMP_DIR" && rm -rf "$TEMP_DIR"
-}
-
-########################################################################
-sync_local() {
-########################################################################
-    # Create a temporary directory
-    TEMP_DIR=$(mktemp -d)
-
-    test -n "$VERBOSE" && echo "syncing s3://$BUCKET/$PATH_PREFIX => $TEMP_DIR/$PATH_PREFIX..."
-
-    # Sync S3 contents to the temporary directory
-    $AWS s3 sync "s3://$BUCKET/$PATH_PREFIX" "$TEMP_DIR/$PATH_PREFIX" $QUIET --profile "$AWS_PROFILE"
-}
-
-########################################################################
-index() {
-########################################################################
-    echo >&2 "indexing OrePAN repository..." >&2
-    orepan2-indexer "$TEMP_DIR/$PATH_PREFIX"
-}
-
-########################################################################
-index_and_sync_remote() {
-########################################################################
-    index
-    sync_remote
-}
-
-########################################################################
-sync_remote() {
-########################################################################
-    echo >&2 "syncing $TEMP_DIR/$PATH_PREFIX => s3://$BUCKET/$PATH_PREFIX..."
-    $AWS s3 sync "$TEMP_DIR/$PATH_PREFIX" "s3://$BUCKET/$PATH_PREFIX" $QUIET --profile "$AWS_PROFILE"
-}
-
-########################################################################
-add() {
-########################################################################
-    if test -z "$BUCKET"; then
-        echo "$NOT_OK no bucket!";
-        exit 1;
-    fi
-
-    if test -z "$AWS_PROFILE"; then
-        echo "$NOT_OK no profile!";
-        exit 1;
-    fi
-
-    sync_local;
-
-    echo >&2 "injecting $FILE to OrePAN package index..."
-
-    orepan2-inject "$FILE" "$TEMP_DIR/$PATH_PREFIX"
-
-    # Check if orepan2-inject was successful
-    if [[ $? -ne 0 ]]; then
-        echo "$NOT_OK orepan2-inject failed." >&2
-        exit 1
-    fi
-
-    sync_remote;
 }
 
 ########################################################################
@@ -478,11 +390,8 @@ case "$COMMAND" in
             echo "$NOT_OK no file specified"
             usage
         fi
-        
-        $AWS s3 rm s3://$BUCKET/$PATH_PREFIX/authors/id/D/DU/DUMMY/$FILE --profile $AWS_PROFILE
-        sync_local;
 
-        index_and_sync_remote;
+        orepan2-s3-index -c $CONFIG_FILE delete $FILE
 
         FILE="";
 
@@ -510,7 +419,7 @@ case "$COMMAND" in
             usage
         fi
 
-        add
+        orepan2-s3-index -c $CONFIG_FILE inject $FILE
 
         test -n "$VERBOSE" && echo "creating HTML index..." >&2
 
