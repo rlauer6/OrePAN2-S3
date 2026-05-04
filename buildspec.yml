@@ -3,14 +3,14 @@ project:
   author:
     name: Rob Lauer
     mailto: rlauer@treasurersbriefcase.com
-pm_module: OrePAN2::S3
+pm-module: OrePAN2::S3
 min-perl-version: 5.010
 dependencies:
   requires: requires
-  test_requires: test-requires
+  test-requires: test-requires
 path:
-  pm_module: lib
-  exe_files: bin
+  pm-module: lib
+  exe-files: bin
   tests: t
 extra-files:
   - ChangeLog

@@ -1,3 +1,21 @@
+Mon May  4 15:07:27 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[1.2.1]:
+	* VERSION: bump
+	* requires
+	- -Archive::Tar, IO::Compress::Gzip (core)
+	- -YAML
+	* cpanfile: likewise
+	* buildspec.yml: replace '_' with '-'
+	* builder: new
+	* .github/workflows/build.yml: new
+	* build-requires: new
+	* build-mirrors: new
+	* Makefile: updated from CPAN::Maker::Bootstrapper
+	* .includes/update.mk: likewise
+	* release-notes* -> release-notes/
+	* lib/OrePAN2/S3.pm.in: remove YAML dependency
+
 Wed Apr 29 09:02:47 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[1.2.0]:
@@ -9,7 +27,6 @@ Wed Apr 29 09:02:47 2026  Rob Lauer  <rclauer@gmail.com>
 	- -Amazon::S3
 	- +Amazon::S3::Lite, CPAN::Meta, IO::Compress::Gzip,
 	- +LWP::MediaTypes, Role::Tiny, Role::Tiny::With
-	* cpanfile: likewise
 	* ChangeLog: modified
 	* bin/orepan2-s3.in
 	- refactored out add, upload-artifacts, delete
