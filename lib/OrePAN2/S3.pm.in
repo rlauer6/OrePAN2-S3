@@ -20,7 +20,7 @@ use Scalar::Util qw(openhandle);
 use Readonly;
 
 Readonly::Scalar our $PACKAGE_INDEX  => '02packages.details.txt.gz';
-Readonly::Scalar our $DEFAULT_CONFIG => $ENV{HOME} . '/.orepan2-s3.json';
+Readonly::Scalar our $DEFAULT_CONFIG => sprintf '%s/%s', $ENV{HOME} // q{}, '/.orepan2-s3.json';
 Readonly::Scalar our $METACPAN_URL   => 'https://metacpan.org/pod';
 Readonly::Scalar our $AUTHOR_PATH    => 'D/DU/DUMMY';
 
@@ -260,43 +260,6 @@ sub update_index {
   $self->get_logger->info( sprintf 'updated index at %s', $index_key );
 
   return;
-}
-
-########################################################################
-sub scan_provides {
-########################################################################
-  my ( $self, $file ) = @_;
-
-  require Archive::Tar;
-  require CPAN::Meta;
-
-  my $tar = Archive::Tar->new;
-  $tar->read($file);
-
-  # find the top-level prefix, e.g. "CPAN-Maker-1.8.2"
-  my ($entry) = grep { $_->name =~ m{/META\.(?:json|yml|yaml)$}xsm } $tar->get_files;
-
-  if ( !$entry ) {
-    $self->get_logger->warn("no META file found in $file");
-    return {};
-  }
-
-  my ($prefix) = ( split m{/}xsm, $entry->name )[0];
-
-  for my $metafile (qw(META.json META.yml META.yaml)) {
-    my $content = eval { $tar->get_content("$prefix/$metafile") };
-    next if !$content;
-
-    my $meta = eval { CPAN::Meta->load_string($content) };
-    next if !$meta || $EVAL_ERROR;
-
-    return $meta->{provides} if $meta->{provides};
-  }
-
-  # Should not happen - injecting tarballs we create with CPAN::Maker
-  $self->get_logger->warn("META found but no provides in $file");
-
-  return {};
 }
 
 ########################################################################
@@ -545,8 +508,14 @@ sub cmd_create_index {
   my %pod_links;
 
   foreach my $distribution ( keys %{$repo} ) {
+    $self->get_logger->info( 'distribution: ' . $distribution );
 
     my ($distribution_name) = DarkPAN::Utils::parse_distribution_path($distribution);
+
+    if ( !$distribution_name ) {
+      warn "WARN: could not get distribution name from $distribution\n";
+      next;
+    }
 
     my $readme = $self->look_for_object( $distribution_name, 'README.html' );
 
@@ -763,6 +732,7 @@ sub main {
         url|U=s
         distribution|d=s
         upload|u
+        upload-only|U
       )
     ],
     default_options => {
@@ -772,18 +742,19 @@ sub main {
     },
     extra_options => [qw(config credentials template author_path s3)],
     commands      => {
+      'create'        => \&cmd_create_index,
       'create-docs'   => \&cmd_create_docs,
-      create          => \&cmd_create_index,
-      delete          => \&cmd_delete,
-      download        => \&cmd_download_orepan_index,
+      'create-index'  => \&cmd_create_index,
+      'delete'        => \&cmd_delete,
+      'download'      => \&cmd_download_orepan_index,
       'dump-template' => sub {
         print {*STDOUT} shift->get_template;
         return 0;
       },
-      inject             => \&cmd_inject,
+      'inject'           => \&cmd_inject,
       'invalidate-index' => \&cmd_invalidate_index,
-      show               => \&cmd_show_orepan_index,
-      upload             => \&cmd_upload_index,
+      'show'             => \&cmd_show_orepan_index,
+      'upload'           => \&cmd_upload_index,
       'upload-artifacts' => \&cmd_upload_artifacts,
     },
   );

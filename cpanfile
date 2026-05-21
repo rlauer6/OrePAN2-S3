@@ -8,6 +8,7 @@ requires "DarkPAN::Utils", "1.0.0";
 requires "DarkPAN::Utils::Docs", "1.0.0";
 requires "JSON", "4.10";
 requires "LWP::MediaTypes", "6.04";
+requires "Log::Log4perl", "1.57";
 requires "OrePAN2::Index", "0";
 requires "Readonly", "2.05";
 requires "Role::Tiny", "2.002004";

@@ -1,0 +1,1 @@
+release-notes/release-notes-1.2.2.md
