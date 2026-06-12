@@ -1,3 +1,20 @@
+Fri Jun 12 14:37:29 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[1.2.3]:
+	* VERSION: bump
+	* release-notes.md: updated
+	* release-notes/release-notes-1.2.3.md: new
+	* cpanfile
+	- +File::ShareDir
+	* requires: likewise
+	* lib/OrePAN2/S3.pm.in
+	(init)
+	- set dist_dir
+	(main): +dist_dir
+	* lib/OrePAN2/S3/Role/UploadArtifacts.pm.in: modified
+	(cmd_upload_artifacts):
+	- upload files from distribution or fqp
+
 Wed May 20 07:32:52 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[1.2.2]:

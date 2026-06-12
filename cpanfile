@@ -6,6 +6,7 @@ requires "CLI::Simple::Utils", "2.0.1";
 requires "CPAN::Meta", "2.150010";
 requires "DarkPAN::Utils", "1.0.0";
 requires "DarkPAN::Utils::Docs", "1.0.0";
+requires "File::ShareDir", "1.118";
 requires "JSON", "4.10";
 requires "LWP::MediaTypes", "6.04";
 requires "Log::Log4perl", "1.57";
