@@ -1,3 +1,14 @@
+Mon Jun 22 14:47:56 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[1.2.4]:
+	* VERSION: bump
+	* release-notes.md: updated
+	* release-notes/release-notes-1.2.4.md: new
+	* requires.skip: new
+	* requires
+	- +OrePAN2::Lite, Amazon::S3::Lite 2.0.3, CLI::Simple 2.0.3, -OrePAN::Index
+	* cpanfile: likewise
+
 Fri Jun 12 14:37:29 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[1.2.3]:
