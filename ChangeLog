@@ -1,3 +1,28 @@
+Thu Jul  2 06:43:59 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[1.2.5]:
+	* VERSION: bump
+	* release-notes.md: updated
+	* release-notes/release-notes-1.2.5.md: new
+	* lib/OrePAN2/S3.pm.in
+	(fetch_config)
+	- return if already fetched
+	- set config file to abs_path
+	(fetch_orepan_index)
+	- use /tmp since containers are ro filesystem
+	(_upload_html)
+	- add document to document index
+	(look_for_object): use cache instead of head_object (speed up)
+	(init)
+	- pre-load document index
+	(_init_doc_index): new
+	(fetch_template)
+	- load templates from same directory as config if relative path
+	* lib/OrePAN2/S3/Role/UploadArtifacts.pm.in
+	(upload_artifacts): likewise
+	* requires: bump Amazon::S3::Lite required version to 1.2.3
+	* cpanfile: likewise
+
 Mon Jun 22 14:47:56 2026  Rob Lauer  <rclauer@gmail.com>
 
 	[1.2.4]:
