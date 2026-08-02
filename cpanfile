@@ -1,4 +1,3 @@
-requires "OrePAN2::Lite", "1.0.0";
 requires "Amazon::Credentials", "1.3.0";
 requires "Amazon::S3::Lite", "1.2.3";
 requires "CLI::Simple", "2.0.3";
@@ -11,6 +10,7 @@ requires "File::ShareDir", "1.118";
 requires "JSON", "4.10";
 requires "LWP::MediaTypes", "6.04";
 requires "Log::Log4perl", "1.57";
+requires "OrePAN2::Lite", "1.0.0";
 requires "Readonly", "2.05";
 requires "Role::Tiny", "2.002004";
 requires "Role::Tiny::With", "2.002004";

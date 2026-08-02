@@ -83,7 +83,7 @@ When you add a file to the DarkPAN repository the script will:
 
 * Upload the file to your S3 bucket
 * Update the package index
-* Create a default F</index.html> page the shows all of your
+* Create a default `/index.html` page that shows all of your
   distributions
 * Invalidate the CloudFront cache if you are using CloudFront
 
@@ -93,6 +93,9 @@ cache in order to see your updates to the `index.html` and the DarkPAN
 index.  If you don't need to do that because your TTL on your
 CloudFront distribution is fairly low, use the `-x` option to prevent
 the script from invalidating the cache.
+
+> Note: In order to invalidate the CloudFront cache your AWS account
+> credentials must have permissions for CloudFront operations.
 
 Keep in mind that AWS gives you 1000 invalidations/month for free
 after which you pay $.005 per invalidation request. More than one file
@@ -115,7 +118,11 @@ orepan2-index dump-template
 
 If you want to create your own template you can provide that using the
 C<--template> option or set the `template` key in your
-configuration. See C<perldoc OrePAN2::S3> for more details.
+configuration.
+
+Learn more about templates and customizing your index page by reading
+the module documentation (`perldoc OrePAN2::S3`).
+
 
 ## Distribution Documentation
 

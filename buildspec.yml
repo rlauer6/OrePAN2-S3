@@ -14,6 +14,7 @@ path:
   tests: t
 extra-files:
   - ChangeLog
+  - release-notes.md
   - share:
       - README.md
 resources:

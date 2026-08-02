@@ -14,7 +14,8 @@ use English qw(-no_match_vars);
 use Encode qw(encode_utf8);
 use File::Basename qw(basename dirname);
 use File::ShareDir qw(dist_dir);
-use File::Temp qw(tempfile);
+use File::Copy;
+use File::Temp qw(tempfile tempdir);
 use JSON;
 use List::Util qw(pairs);
 use Scalar::Util qw(openhandle);
@@ -30,6 +31,7 @@ use Role::Tiny::With;
 
 with 'OrePAN2::S3::Role::Inject';
 with 'OrePAN2::S3::Role::Delete';
+with 'OrePAN2::S3::Role::Upload';
 with 'OrePAN2::S3::Role::UploadArtifacts';
 
 use parent qw(CLI::Simple);
@@ -360,7 +362,12 @@ sub cmd_create_docs {
   my $module_name = $key_prefix;
   $module_name =~ s/\-/::/gxsm;
 
-  my $file = $dpu->extract_module( $distribution, $module_name );
+  my $file   = $dpu->extract_module( $distribution, $module_name );
+  my $readme = $dpu->extract_file( sprintf '%s-%s/README.md', $key_prefix, $version );
+
+  my $changelog = $dpu->extract_file( sprintf '%s-%s/Changes', $key_prefix, $version );
+  $changelog //= $dpu->extract_file( sprintf '%s-%s/CHANGES',   $key_prefix, $version );
+  $changelog //= $dpu->extract_file( sprintf '%s-%s/ChangeLog', $key_prefix, $version );
 
   if ( $self->get_upload ) {
     if ($file) {
@@ -372,36 +379,26 @@ sub cmd_create_docs {
         distribution => basename($distribution),
       );
     }
-  }
-  else {
-    open my $fh, '>', "$key_prefix.html"
-      or die "could not open $key_prefix.html for writing\n";
 
-    print {$fh} $file;
-
-    close $fh;
-  }
-
-  my $readme = $dpu->extract_file( sprintf '%s-%s/README.md', $key_prefix, $version );
-
-  if ( $self->get_upload && $readme ) {
-    $self->upload_html(
-      name     => 'README.html',
-      markdown => $readme,
-      prefix   => $key_prefix,
-      wrap     => $TRUE,
-    );
-  }
-  elsif ($readme) {
-    open my $fh, '>', 'README.html'
-      or die "could not open README.html for writing\n";
-
-    print {$fh} $readme;
-
-    close $fh;
+    if ($readme) {
+      $self->upload_html(
+        name     => 'README.html',
+        markdown => $readme,
+        prefix   => $key_prefix,
+        wrap     => $TRUE,
+      );
+    }
   }
 
-  return 0;
+  my $tar = Archive::Tar->new;
+
+  $tar->add_data( 'README.md',      $readme    // q{} );
+  $tar->add_data( "$key_prefix.pm", $file      // q{} );
+  $tar->add_data( 'ChangeLog',      $changelog // q{} );
+
+  $tar->write( 'docs.tar.gz', $TRUE );
+
+  return $SUCCESS;
 }
 
 ########################################################################
@@ -650,7 +647,12 @@ sub cmd_download_orepan_index {
   die "ERROR: Could not download $PACKAGE_INDEX\n$EVAL_ERROR"
     if !$filename || !-s "$filename";
 
-  rename $filename, $PACKAGE_INDEX;
+  print {*STDERR} "copying $filename => $PACKAGE_INDEX\n";
+
+  copy $filename, $PACKAGE_INDEX
+    or die "ERROR: could not copy $filename -> $PACKAGE_INDEX\n";
+
+  unlink $filename;
 
   print {*STDOUT} $PACKAGE_INDEX . "\n";
 
@@ -768,8 +770,6 @@ sub main {
         template|t=s
         url|U=s
         distribution|d=s
-        upload|u
-        upload-only|U
       )
     ],
     default_options => {
@@ -791,9 +791,11 @@ sub main {
       'inject'           => \&cmd_inject,
       'invalidate-index' => \&cmd_invalidate_index,
       'show'             => \&cmd_show_orepan_index,
-      'upload'           => \&cmd_upload_index,
+      'upload'           => \&cmd_upload,
+      'upload-index'     => \&cmd_upload_index,
       'upload-artifacts' => \&cmd_upload_artifacts,
     },
+    alias => { commands => { add => 'upload' } },
   );
 
   return $cli->run();
@@ -861,97 +863,83 @@ __DATA__
 
 =head1 SYNOPSIS
 
-  # via the bash wrapper (recommended)
+  # Upload a distribution to DarkPAN without indexing
+  orepan2-s3 upload My-Dist-1.0.tar.gz
+  # or using the alias
   orepan2-s3 add My-Dist-1.0.tar.gz
+
+  # Upload AND index a new distribution
+  orepan2-s3 inject My-App-1.0.0.tar.gz
+
+  # Regenerate and upload the HTML index page
   orepan2-s3 index
+  orepan2-s3 upload-index
 
-  # or directly via the modulino
-  orepan2-s3-index create --upload
-
-  # add and index a new distribution
-  orepan2-s3-index inject My-App-1.0.0.tar.gz
-
-  # upload artifacts listed in config file
-  orepan2-s3-index upload-artifacts
+  # Upload custom artifacts specified in config
+  orepan2-s3 upload-artifacts
 
 =head1 DESCRIPTION
 
-This class is used to add distributions to your own DarkPAN
-repository housed on Amazon's S3 storage. It leverages L<OrePAN2> to
-create and maintain your own DarkPAN repository. You can read more
-about setting up a DarkPAN on Amazon using S3 + Cloudfront
-L<here|https://github.com/rlauer6/OrePAN2-S3/blob/master/README.md>.
+C<OrePAN2::S3> provides tooling for maintaining a DarkPAN mirror on Amazon S3 
+backed optional CloudFront distribution support. 
 
-You can read more about creating a secure static website using Amazon
-S3 L<here|https://blog.tbcdevelopmentgroup.com/2025-02-18-post.html>.
+As of version 2.0.0, C<orepan2-s3> is implemented as a Perl modulino, replacing 
+the legacy bash implementation and unifying all DarkPAN management commands under 
+a single CLI interface.
 
 =head1 USAGE
 
- orepan2-s3 options command
-
-Perl script for maintaining a DarkPAN mirror using S3 + CloudFront.
-
-I<NOTE: C<orepan2-s3> is the bash script that calls this Perl class
-that doubles as a modulino.  The documentation here refers to the
-script (not the class)>.
+  orepan2-s3 [options] command [args]
 
 =head2 Options
 
  -h, --help           Display this help message
- -b, --bucket-name    Overrides bucket in configuration
- -c, --config-file    Name of the configuration file (default: ~/.orepan2-s3.json)
- -o, --output         Name of the output file
- -p, --profile        Your AWS profile if not provided in configuration
- -n, --profile-name   Name of a profile inside the config file
- -t, --template       Name of a template that will be used as the index.html page
- -d, --distribution   Path to distribution tarball
- -u, --upload         Upload files after processing (for create-index, create-docs)
- -U, --url            Cloudfront URL
+ -v, --verbose        Enable verbose output
+ -l, --log-level      Logging level (error, warn, info, debug, trace)
+ -c, --config         Path to configuration file (default: ~/.orepan2-s3.json)
+ -P, --prefix         S3 key prefix path
+ -b, --bucket         S3 bucket name
+ -p, --profile        AWS profile name
+ -n, --profile-name   Configuration profile section name inside config file
+ -t, --template       Path to custom HTML template for index.html
+ -d, --distribution   Path to target distribution tarball
+ -U, --url            CloudFront distribution URL
 
 =head2 Commands
 
-=over 5
+=over 4
 
-=item * create - Create a new F<index.html> from the mirror's manifest file.
+=item * B<upload> (alias: B<add>)
 
-=item * delete - Delete a distribution from repo and reindex
+Uploads the specified distribution tarball to S3 under the author path. Does B<not> update the package index.
 
-=item * download - Download the mirror's manifest file (F<02packages.details.txt.gz>).
+  orepan2-s3 upload My-Package-1.0.0.tar.gz
 
-=item * inject - Uploads a tarball and adds to the DarkPAN index
+=item * B<inject>
 
-=item * show - Print the manifest file to STDOUT or a file.
+Uploads the distribution tarball to S3 B<and> updates the package details index (C<02packages.details.txt.gz>).
 
-=item * dump-template - Outputs the default index.html template.
+  orepan2-s3 inject My-Package-1.0.0.tar.gz
 
-=item * create-docs - parse distribution looking for a README.md and/or pod
+=item * B<upload-index>
 
-=item * invalidate-index - I<not currently implemented>
+Uploads the generated C<index.html> file to the root of the DarkPAN mirror.
 
-=item * upload - Upload the index.html file to the mirror's root.
+=item * B<upload-artifacts>
 
-=item * upload-artifacts - Uploads the files listed in the C<index: files:> section of the config file.
+Uploads additional non-package artifacts defined in the C<index: files:> section of your configuration file.
 
-=back
+=item * B<delete>
 
-=head2 Notes
+Removes a distribution from the repository and regenerates the index.
 
-=over 5
+=item * B<create-docs>
 
-=item The preferred way of using this utility is through the bash wrapper.
+Extracts documentation (POD, C<README.md>, and C<ChangeLog>) from a distribution, converts POD/Markdown to HTML, uploads documentation pages to S3, and creates a local C<docs.tar.gz> archive.
 
-I<The following commands are available only through the C<orepan2-s3>
-bash wrapper, not the modulino directly:>
+=item * B<invalidate-index>
 
-=over 5
-
-=item * add {file} - inject a tarball into the repository and re-index
-
-=item * delete {file} - remove a distribution and re-index
-
-=item * invalidate - invalidate the CloudFront cache
-
-=back
+Invalidates CloudFront cache paths associated with package indices and documentation.
 
 =back
 
@@ -1171,6 +1159,20 @@ Example:
         </ul>
   [% END %]
      <hr>
+
+=back
+
+=head1 ROLES CONSUMED
+
+=over 4
+
+=item * L<OrePAN2::S3::Role::Inject>
+
+=item * L<OrePAN2::S3::Role::Delete>
+
+=item * L<OrePAN2::S3::Role::Upload>
+
+=item * L<OrePAN2::S3::Role::UploadArtifacts>
 
 =back
 
