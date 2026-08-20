@@ -11,7 +11,7 @@ use File::Basename qw(basename);
 use Role::Tiny;
 
 ########################################################################
-sub cmd_upload {
+sub cmd_upload {  # alias add
 ########################################################################
   my ( $self, $distribution ) = @_;
 
@@ -26,9 +26,50 @@ sub cmd_upload {
 
   $self->set_distribution($file);
 
+  my $dirty = $self->_check_dirty($file);
+
+  if ($dirty) {
+    if ( !$self->get_force ) {
+      print {*STDOUT} "ERROR: You're trying to upload an uncommitted distribution. Use --force to force upload\n";
+      return $FAILURE;
+    }
+
+    print {*STDOUT} "WARNING: You're uploading an uncommitted distribution - $dirty\n";
+  }
+
   $self->_upload($file);
 
   return $SUCCESS;
+}
+
+########################################################################
+sub _check_dirty {
+########################################################################
+  my ( $self, $file ) = @_;
+
+  return
+    if !$self->get_dirty_check;
+
+  require Archive::Tar;
+
+  my $tar = Archive::Tar->new;
+  $tar->read($file);
+
+  my $name = $file;
+  $name =~ s/[-]\d.*$//xsm;
+  $name =~ s/[-]/\//xsmg;
+
+  my $content = eval { $tar->get_content( sprintf '%s/lib/%s.pm', basename( $file, '.tar.gz' ), $name ); };
+
+  return
+    if !$content;
+
+  my ($dirty) = $content =~ /GIT_DIRTY\s*=\s['"](.*?)['"];\n/xsm;
+
+  return
+    if !$dirty || $dirty !~ /dirty/xsm;
+
+  return $dirty;
 }
 
 ########################################################################

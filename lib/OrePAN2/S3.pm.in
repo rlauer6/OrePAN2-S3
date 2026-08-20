@@ -36,7 +36,10 @@ with 'OrePAN2::S3::Role::UploadArtifacts';
 
 use parent qw(CLI::Simple);
 
-our $VERSION = '@PACKAGE_VERSION@';
+our $VERSION   = '@PACKAGE_VERSION@';
+our $GIT_SHA   = '@GIT_SHA@';
+our $GIT_DIRTY = '@GIT_DIRTY@';
+
 our %DOC_INDEX;
 
 __PACKAGE__->use_log4perl( level => 'info' );
@@ -516,12 +519,12 @@ sub cmd_create_index {
   my %pod_links;
 
   foreach my $distribution ( keys %{$repo} ) {
-    $self->get_logger->info( 'distribution: ' . $distribution );
+    $self->get_logger->debug( 'distribution: ' . $distribution );
 
     my ($distribution_name) = DarkPAN::Utils::parse_distribution_path($distribution);
 
     if ( !$distribution_name ) {
-      warn "WARN: could not get distribution name from $distribution\n";
+      $self->get_logger->warn("WARN: could not get distribution name from $distribution");
       next;
     }
 
@@ -574,15 +577,14 @@ sub cmd_create_index {
   $template->process( \$text, $params, \$output )
     or die $template->error();
 
-  if ( $self->get_upload ) {
-    $self->_upload_html( \$output, 'index.html' );
-    $self->get_logger->debug($output);
-  }
-  else {
-    $self->send_output($output);
-  }
+  return $self->send_output($output)
+    if !$self->get_upload;
 
-  return 0;
+  $self->_upload_html( \$output, 'index.html' );
+
+  $self->get_logger->debug($output);
+
+  return $SUCCESS;
 }
 
 ########################################################################
@@ -609,7 +611,7 @@ sub send_output {
 
   $outfile && close $fh;
 
-  return 0;
+  return $SUCCESS;
 }
 
 ########################################################################
@@ -761,21 +763,24 @@ sub main {
   my $cli = OrePAN2::S3->new(
     option_specs => [
       qw(
-        help|h
         bucket-name|b=s
         config-file|c=s
+        dirty-check!
+        distribution|d=s
+        force
+        help|h
         output|o=s
-        profile|p=s
         profile-name|n=s
+        profile|p=s
         template|t=s
         url|U=s
-        distribution|d=s
       )
     ],
     default_options => {
       config_file  => $DEFAULT_CONFIG,
       profile_name => 'default',
-      profile      => $ENV{AWS_PROFILE}
+      profile      => $ENV{AWS_PROFILE},
+      dirty_check  => $TRUE,
     },
     extra_options => [qw(config credentials template author_path s3 dist_dir)],
     commands      => {
@@ -893,17 +898,19 @@ a single CLI interface.
 
 =head2 Options
 
- -h, --help           Display this help message
- -v, --verbose        Enable verbose output
- -l, --log-level      Logging level (error, warn, info, debug, trace)
- -c, --config         Path to configuration file (default: ~/.orepan2-s3.json)
- -P, --prefix         S3 key prefix path
- -b, --bucket         S3 bucket name
- -p, --profile        AWS profile name
- -n, --profile-name   Configuration profile section name inside config file
- -t, --template       Path to custom HTML template for index.html
- -d, --distribution   Path to target distribution tarball
- -U, --url            CloudFront distribution URL
+ -h, --help            Display this help message
+ -v, --verbose         Enable verbose output
+ -l, --log-level       Logging level (error, warn, info, debug, trace)
+ -c, --config          Path to configuration file (default: ~/.orepan2-s3.json)
+ -P, --prefix          S3 key prefix path
+ -b, --bucket          S3 bucket name
+ -p, --profile         AWS profile name
+ -n, --profile-name    Configuration profile section name inside config file
+ -t, --template        Path to custom HTML template for index.html
+ -d, --distribution    Path to target distribution tarball
+ -U, --url             CloudFront distribution URL
+     --no-dirty-check  prevents checking of GIT_DIRTY variable
+     --force           forces upload for uncommitted distributions
 
 =head2 Commands
 
@@ -911,9 +918,28 @@ a single CLI interface.
 
 =item * B<upload> (alias: B<add>)
 
-Uploads the specified distribution tarball to S3 under the author path. Does B<not> update the package index.
+Uploads the specified distribution tarball to S3 under the author
+(D/DU/DUMMY) path. Does B<not> update the package index.
 
   orepan2-s3 upload My-Package-1.0.0.tar.gz
+
+The C<upload> command will check the main module to see if there is a
+C<$GIT_DIRTY> global variable defined that indicates whether the
+distribution has been committed. If the distribution is uncommitted
+the upload function will abort with an error message by default. Use
+C<--no-dirty-check> or C<--force> to upload a dirty distribution.
+
+I<Note:>
+
+When using the C<CPAN::Maker::Bootstrapper> framework the
+distribution status is automatically set in the C<Makefile> so your
+module can include it as a global.
+
+ GIT_DIRTY := $(shell $(GIT) describe --always --dirty --abbrev=40 2>/dev/null || echo 'unknown')
+
+...then in your module:
+
+ our $GIT_DIRTY = '@GIT_DIRTY@';
 
 =item * B<inject>
 
@@ -935,11 +961,14 @@ Removes a distribution from the repository and regenerates the index.
 
 =item * B<create-docs>
 
-Extracts documentation (POD, C<README.md>, and C<ChangeLog>) from a distribution, converts POD/Markdown to HTML, uploads documentation pages to S3, and creates a local C<docs.tar.gz> archive.
+Extracts documentation (POD, C<README.md>, and C<ChangeLog>) from a
+distribution, converts POD/Markdown to HTML, uploads documentation
+pages to S3, and creates a local C<docs.tar.gz> archive.
 
 =item * B<invalidate-index>
 
-Invalidates CloudFront cache paths associated with package indices and documentation.
+Invalidates CloudFront cache paths associated with package indices and
+documentation.
 
 =back
 

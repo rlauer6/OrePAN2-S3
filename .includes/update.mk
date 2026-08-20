@@ -4,7 +4,10 @@ MANAGED_FILES = \
     git.mk \
     help.mk \
     version.mk \
+    bash-completion.mk \
+    modulino.mk \
     perl.mk \
+    local.mk \
     release-notes.mk
 
 BOOTSTRAPPER_DIST_DIR := $(shell perl -MFile::ShareDir=dist_dir \
@@ -39,12 +42,12 @@ update:
 	  cp $(BOOTSTRAPPER_DIST_DIR)/builder builder; \
 	  chmod 0555 builder; \
 	fi; \
-	chmod +w Makefile; \
-	cp $(BOOTSTRAPPER_DIST_DIR)/Makefile.txt Makefile; \
 	chmod +w .includes/*; \
 	cp $(BOOTSTRAPPER_DIST_DIR)/update.mk .includes/; \
 	cp $(BOOTSTRAPPER_DIST_DIR)/upgrade.mk .includes/; \
 	$(MAKE) post-update; \
+	chmod +w Makefile; \
+	cp $(BOOTSTRAPPER_DIST_DIR)/Makefile.txt Makefile; \
 	chmod -w Makefile .includes/*
 
 .PHONY: update-available
