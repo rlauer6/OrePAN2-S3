@@ -3,6 +3,7 @@ package OrePAN2::S3::Role::Inject;
 use strict;
 use warnings;
 
+use Carp;
 use CLI::Simple::Constants qw(:booleans);
 use CLI::Simple::Utils qw(slurp);
 use Data::Dumper;
@@ -14,6 +15,8 @@ use Role::Tiny;
 
 use Readonly;
 Readonly::Scalar our $PACKAGE_INDEX => '02packages.details.txt.gz';
+
+our $VERSION = '@PACKAGE_VERSION@';
 
 ########################################################################
 sub cmd_inject {
@@ -44,18 +47,24 @@ sub _index_tarball {
 
   my $index_path = sprintf '%s/%s', $self->get_author_path, $basename;
 
-  $self->update_index(
+  return $self->update_index(
     sub {
       my ($index) = @_;
+
       for my $package ( sort keys %{$provides} ) {
         my $version = $provides->{$package}{version};
-        $index->add_index( $package, $version, $index_path );
-        $self->get_logger->info( sprintf 'indexed %s %s', $package, $version // 'undef' );
+        if ( $index->add_index( $package, $version, $index_path ) ) {
+          $self->get_logger->info( sprintf 'indexed %s %s', $package, $version // 'undef' );
+        }
+        else {
+          $self->get_logger->error( sprintf '"%s" was not indexed!', $package );
+          return $FALSE;
+        }
       }
+
+      return $TRUE;
     }
   );
-
-  return $TRUE;
 }
 
 ########################################################################
@@ -134,7 +143,8 @@ sub update_index {
   $index->load($index_file);
   unlink $index_file;
 
-  $code->($index);
+  return
+    if !$code->($index);
 
   my $gz_content;
 
@@ -146,11 +156,33 @@ sub update_index {
   $gz->close;
 
   my $index_key = sprintf '%s/modules/02packages.details.txt.gz', $prefix;
-  $self->get_s3->put_object( $self->get_bucket_name, $index_key, $gz_content, content_type => 'application/gzip', );
 
-  $self->get_logger->info( sprintf 'updated index at %s', $index_key );
+  if ( !$self->get_dryrun ) {
+    $self->get_s3->put_object( $self->get_bucket_name, $index_key, $gz_content, content_type => 'application/gzip', );
+  }
 
-  return;
+  $self->get_logger->info( sprintf 'updated package index: %s%s', $index_key, $self->get_dryrun ? ' (dryrun)' : q{} );
+
+  if ( $self->get_update_site_index ) {
+    $self->get_logger->info( sprintf 'creating site index...%s', $self->get_dryrun ? '(dryrun)' : q{} );
+
+    if ( !$self->get_dryrun ) {
+      $self->cmd_create_site_index;
+    }
+  }
+
+  if ( $self->get_save_index || $self->get_dryrun ) {
+    $self->get_logger->info('writing local copy of 02packages.details.txt.gz');
+
+    open my $fh, '>', '02packages.details.txt.gz'
+      or die "ERROR: could not open 02packages.details.txt.gz for writing\n$OS_ERROR";
+
+    print {$fh} $gz_content;
+
+    close $fh;
+  }
+
+  return $TRUE;
 }
 
 1;

@@ -1,0 +1,4 @@
+Amazon::API::CloudFront 2.2.6
+IO::Interactive 1.027
+IO::Pager 2.10
+Text::ASCIITable 0.22
