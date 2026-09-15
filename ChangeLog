@@ -1,6 +1,41 @@
+Mon Sep 14 20:38:29 2026  Rob Lauer  <rclauer@gmail.com>
+
+	[2.1.1]:
+	* VERSION: bump
+	* release-notes.md: updated
+	* release-notes/release-notes-2.1.1.md: new
+	* .includes/bootstrap.mk: added by CPAN::Maker::Bootstrapper
+	* .includes/update.mk: updated by CPAN::Maker::Bootstrapper
+	* Makefile: likewise
+	* builder: likewise
+	* requires
+	- OrePAN2::Lite 2.0.0, DarkPAN::Indexer
+	* cpanfile: likewise
+	* lib/OrePAN2/S3.pm.in
+	- PACKAGE_INDEX => PACKAGES_DETALS_INDEX
+	(has_packages_version_index): new
+	(cmd_download_version_index): new
+	(fetch_config)
+	- croak, not die
+	- log @ debug level
+	(has_packages_version_index): new
+	(_invalidate_index): invalidate packages index if we have one
+	(cmd_download_orepan_index)
+	- PACKAGE_INDEX => PACKAGES_DETALS_INDEX
+	(fetch_template)
+	- log @ debug level
+	(main)
+	- --force|f
+	- +download-version-index command
+	* lib/OrePAN2/S3/Role/Delete.pm.in
+	(cmd_delete)
+	- display number of matches instead of entire list
+	- delete packages from version index
+	(_delete_from_packages_version): new
+
 Thu Aug 20 14:31:22 2026  Rob Lauer  <rclauer@gmail.com>
 
-	[2.0.2]:
+	[2.1.0]:
 	* VERSION: bump
 	* release-notes.md: updated
 	* release-notes/release-notes-2.1.0.md: new

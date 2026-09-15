@@ -3,6 +3,7 @@ package OrePAN2::S3::Role::Delete;
 use strict;
 use warnings;
 
+use Carp qw(croak);
 use CLI::Simple::Constants qw(:booleans);
 use English qw(-no_match_vars);
 use File::Basename qw(basename);
@@ -35,8 +36,8 @@ sub cmd_delete {
       $file = $objects[0]->{key};
     }
     elsif ( !$self->get_delete_all || $self->get_dryrun ) {
-      print {*STDOUT} sprintf qq{Multiple object match "%s" - use --delete-all to remove all objects\n}, $file;
-      print {*STDOUT} sprintf "%s\n", join "\n", map { $_->{key} } @objects;
+      $self->get_logger->warn( sprintf qq{Multiple objects match "%s" (%d) - use --delete-all to remove all objects\n},
+        $file, scalar @objects );
 
       return $SUCCESS;
     }
@@ -92,6 +93,10 @@ sub cmd_delete {
     }
   );
 
+  if ( my $packages_index = $self->has_packages_version_index ) {
+    $self->_delete_from_packages_version_index( $packages_index, $file );
+  }
+
   if ( $self->get_invalidate_index ) {
     $self->get_logger->info( sprintf 'invalidating index...%s', $self->get_dryrun ? '(dryrun)' : q{} );
     if ( !$self->get_dryrun ) {
@@ -100,6 +105,23 @@ sub cmd_delete {
   }
 
   return $SUCCESS;
+}
+
+########################################################################
+sub _delete_from_packages_version_index {
+########################################################################
+  my ( $self, $packages_index, $files ) = @_;
+
+  require DarkPAN::Indexer;
+
+  my $indexer = DarkPAN::Indexer->new( config => $self->get_config );
+
+  foreach my $dist ( @{$files} ) {
+    $self->get_logger->info( sprintf 'deleting %s from %s', $dist, $packages_index );
+    $indexer->delete_from_index( distribution => $dist );
+  }
+
+  return;
 }
 
 ########################################################################
