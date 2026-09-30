@@ -2,12 +2,9 @@
 Amazon::Credentials 1.3.0
 Amazon::S3::Lite 1.2.3
 CLI::Simple 2.2.2
-CLI::Simple::Constants 2.2.2
-CLI::Simple::Utils 2.2.2
 CPAN::Meta 2.150010
 DarkPAN::Indexer 1.0.2
 DarkPAN::Utils 1.1.0
-DarkPAN::Utils::Docs 1.1.0
 Data::UUID 1.227
 File::ShareDir 1.118
 JSON 4.10
@@ -15,6 +12,5 @@ LWP::MediaTypes 6.04
 Log::Log4perl 1.57
 Readonly 2.05
 Role::Tiny 2.002004
-Role::Tiny::With 2.002004
 Template 3.102
 Text::Markdown::Discount 0.18
